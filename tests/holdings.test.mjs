@@ -46,8 +46,38 @@ test("jsonErrorLine falls back to counting newlines before 'position N'", () => 
   assert.equal(jsonErrorLine("Unexpected token in JSON at position 6", text), 3);
 });
 
-test("jsonErrorLine is null when the message has no location", () => {
-  assert.equal(jsonErrorLine("Parse error", "a\nb"), null);
+// QJSEngine (Qt 6.11, omarchy-shell) reports every JSON.parse failure with exactly this
+// message: no line, no position. Recorded from the running shell.
+const QJS_MESSAGE = "JSON.parse: Parse error";
+
+test("jsonErrorLine locates the error itself when the message has no location (QJSEngine)", () => {
+  assert.equal(jsonErrorLine(QJS_MESSAGE, '{\n "a": 1,\n}'), 3); // trailing comma: the "}" is on line 3
+  assert.equal(jsonErrorLine(QJS_MESSAGE, SPEC_EXAMPLE.replace("98.10 },", "98.10 }")), 4); // missing comma
+  assert.equal(jsonErrorLine(QJS_MESSAGE, '{"a":\n"b'), 2); // unterminated string ends the text
+  assert.equal(jsonErrorLine(QJS_MESSAGE, "{}\n\nx"), 3); // trailing garbage
+  assert.equal(jsonErrorLine(QJS_MESSAGE, "a\nb"), 1);
+});
+
+test("jsonErrorLine agrees with V8's reported line on malformed input", () => {
+  const cases = [
+    '{\n "a": 1,\n}', '[1,\n2,\n]', '{"a"\n 1}', '{"a": tru\n}', '{"a": 01}', '{"a": -}', '{"a": 1.}',
+    '{"a": 1e}', '{"a": "x\\q"}', '{"a": "\\u12G4"}', '{"a": "\t"}', '{"a":\n "\u001f"}', '{\n\n"a": [1 2]}', '{"a": {}}\n]', "",
+    '\n\n  {"a":', SPEC_EXAMPLE.replace('"cost": 61000', '"cost": 61,000'),
+  ];
+  for (const text of cases) {
+    let message = "";
+    try { JSON.parse(text); } catch (e) { message = /** @type {Error} */ (e).message; }
+    assert.notEqual(message, "", `expected ${JSON.stringify(text)} to be invalid`);
+    const v8 = jsonErrorLine(message, text);
+    assert.notEqual(v8, null, message);
+    assert.equal(jsonErrorLine(QJS_MESSAGE, text), v8, JSON.stringify(text));
+  }
+});
+
+test("jsonErrorLine is null when the message has no location and the text is valid JSON", () => {
+  for (const text of ['{"a": [1, -2.5e+3, true, false, null, "\\u00e9\\n"]}', " 0 ", '"x"', '"\u0020"']) {
+    assert.equal(jsonErrorLine(QJS_MESSAGE, text), null, text);
+  }
 });
 
 test("top level must be an object with a holdings array", () => {
