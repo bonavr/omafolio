@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/",
-    "typecheck": "tsc -p jsconfig.json",
+    "typecheck": "node node_modules/typescript/bin/tsc -p jsconfig.json",
     "check": "npm test && npm run typecheck && omarchy plugin validate ."
   },
   "devDependencies": {
