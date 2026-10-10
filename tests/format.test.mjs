@@ -100,6 +100,15 @@ test("bar value handles negatives and small values", () => {
   assert.equal(formatBarValue(NaN), "—");
 });
 
+test("bar value keeps sub-1 values in plain decimal form, never compacted", () => {
+  assert.equal(formatBarValue(0.001234), "0.001234");
+  assert.equal(formatBarValue(0.00000123), "0.000001230");
+  assert.equal(formatBarValue(-0.00123), "-0.001230");
+  for (const n of [0.001234, 0.0001234, 0.00000123, -0.00123, 1e-12]) {
+    assert.doesNotMatch(formatBarValue(n), /e|k|M|B|T/);
+  }
+});
+
 test("change has a space after the arrow", () => {
   assert.equal(formatChange(1.4), "▲ 1.4%");
   assert.equal(formatChange(-1.11), "▼ 1.1%");
