@@ -1,0 +1,12 @@
+Omafolio
+Copyright (c) 2026 Brendan Brummer. MIT License (see LICENSE).
+
+This project adapts code and patterns from Omacoins
+(https://github.com/bernardcosta/omarchy-omacoins), MIT License,
+Copyright (c) 2026 Bernard Costa:
+
+- Fetcher.qml: the curl fetch discipline of MarketsFeed.qml (one request in
+  flight, one queued request carrying the latest parameters, identical queued
+  request dropped).
+- MarketService.qml: the atomic file write of Panel.qml (mktemp in the target
+  directory, then rename) and its watched FileView.
