@@ -62,52 +62,35 @@ FocusScope {
       panel.bar.shell.updateEntryInline(panel.moduleName, entry)
   }
 
-  // Listing currency of each held asset whose quote has said it; crypto has
-  // none. Record<asset, currency>.
-  readonly property var listing: {
-    var out = {}
-    for (var i = 0; i < holdings.length; i++) {
-      var asset = holdings[i].asset
-      var quote = quotes[asset]
-      if (quote && asset.indexOf("crypto:") !== 0) out[asset] = quote.currency
-    }
-    return out
+  // The asset's listing currency once its quote has said it; null before
+  // then, and for crypto, which has none.
+  function listingOf(asset) {
+    var quote = quotes[asset]
+    return quote && asset.indexOf("crypto:") !== 0 ? quote.currency : null
   }
 
-  // Every save stores no costCurrency that equals the asset's listing
-  // currency (the file's rule).
+  // Saves exactly `list`. Only user actions call this; nothing on the page
+  // writes portfolio.json on its own.
   function saveHoldings(list) {
-    return !locked && market.saveHoldings(Holdings.withoutListingCostCurrency(list, listing))
+    return !locked && market.saveHoldings(list)
   }
-
-  // A cost currency chosen before the asset's quote arrived may turn out to be
-  // its listing currency; drop it then. Waits while a field is being edited,
-  // since that changes the holding's identity under the edit.
-  function tidyCostCurrencies() {
-    if (locked || activeFocus) return
-    var tidied = Holdings.withoutListingCostCurrency(holdings, listing)
-    if (tidied !== holdings) market.saveHoldings(tidied)
-  }
-
-  onListingChanged: tidyCostCurrencies()
-  onActiveFocusChanged: if (!activeFocus) Qt.callLater(tidyCostCurrencies)
-  Component.onCompleted: tidyCostCurrencies()
 
   // Changes the holding with `identity` ({asset, costCurrency}); nothing when
-  // no holding has it any more.
+  // no holding has it any more. A costCurrency equal to the asset's listing
+  // currency is dropped from this holding only (lib/holdings.mjs editHolding).
   function editHolding(identity, changes) {
     if (!identity) return
-    var next = Holdings.editHolding(holdings, identity.asset, identity.costCurrency, changes)
+    var next = Holdings.editHolding(holdings, identity.asset, identity.costCurrency, changes, listingOf(identity.asset))
     if (next !== holdings) saveHoldings(next)
   }
 
   // Structural changes first let a field still being edited save into its own
   // row: losing the keyboard finishes the edit.
-  function setCostCurrency(holding, listingCurrency, chosen) {
+  function setCostCurrency(holding, chosen) {
     unfocus()
-    if (!holding) return
-    var next = Holdings.costCurrencyFor(holding.asset, chosen, listingCurrency)
-    if (next !== holding.costCurrency) editHolding(holding, { costCurrency: next })
+    // Picking the currency it is already in changes nothing.
+    if (!holding || chosen === (holding.costCurrency || listingOf(holding.asset))) return
+    editHolding(holding, { costCurrency: chosen })
   }
 
   function removeHolding(holding) {
@@ -617,7 +600,7 @@ FocusScope {
     onClosed: target = null
 
     function choose(code) {
-      if (target) page.setCostCurrency(target.holding, target.listing, code)
+      if (target) page.setCostCurrency(target.holding, code)
       close()
     }
 

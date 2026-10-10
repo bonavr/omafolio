@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseHoldings, serializeHoldings, withHolding, withoutHolding, defaultCostCurrency, jsonErrorLine,
-  addHolding, editHolding, costCurrencyFor, withoutListingCostCurrency,
+  addHolding, editHolding,
 } from "../lib/holdings.mjs";
 
 const SPEC_EXAMPLE = `{ "holdings": [
@@ -362,50 +362,53 @@ test("editHolding of an identity no longer held changes nothing", () => {
   assert.equal(editHolding(start, "AAPL", undefined, { quantity: 1 }), start);
 });
 
-test("costCurrencyFor omits the listing currency for listed assets only", () => {
-  assert.equal(costCurrencyFor("VOO", "USD", "USD"), undefined);
-  assert.equal(costCurrencyFor("VOO", "AUD", "USD"), "AUD");
-  assert.equal(costCurrencyFor("VOO", "USD", null), "USD");
-  assert.equal(costCurrencyFor("crypto:bitcoin", "AUD", "AUD"), "AUD");
-});
-
-test("withoutListingCostCurrency drops a costCurrency equal to the listing currency", () => {
-  const start = [
-    { asset: "VTI", quantity: 10, cost: 250.5, costCurrency: "USD" },
-    { asset: "VOO", quantity: 12, cost: 600, costCurrency: "AUD" },
-    { asset: "crypto:bitcoin", quantity: 0.05, cost: 61000, costCurrency: "AUD" },
-  ];
-  const out = withoutListingCostCurrency(start, { VTI: "USD", VOO: "USD", "crypto:bitcoin": "AUD" });
-  assert.deepEqual(out[0], { asset: "VTI", quantity: 10, cost: 250.5 });
+test("editHolding with a listing currency: the ▾ choice of the listing currency is omitted", () => {
+  const start = [{ asset: "VTI", quantity: 10, cost: 250.5, costCurrency: "AUD" }];
+  const out = editHolding(start, "VTI", "AUD", { costCurrency: "USD" }, "USD");
+  assert.deepEqual(out, [{ asset: "VTI", quantity: 10, cost: 250.5 }]);
   assert.ok(!("costCurrency" in out[0]));
-  assert.equal(out[1], start[1]);
-  assert.equal(out[2], start[2]);
-  assert.equal(start[0].costCurrency, "USD");
 });
 
-test("withoutListingCostCurrency returns the same list when nothing is redundant", () => {
-  const start = [
-    { asset: "VTI", quantity: 1, cost: 1 },
-    { asset: "VOO", quantity: 1, cost: 1, costCurrency: "AUD" },
-    { asset: "AAPL", quantity: 1, cost: 1, costCurrency: "USD" },
-  ];
-  // VOO lists in USD (differs); AAPL's listing currency is not known yet.
-  assert.equal(withoutListingCostCurrency(start, { VTI: "USD", VOO: "USD" }), start);
-  const empty = [];
-  assert.equal(withoutListingCostCurrency(empty, {}), empty);
+test("editHolding keeps a chosen currency that is not the listing one, or when the listing is unknown", () => {
+  const start = [{ asset: "VTI", quantity: 10, cost: 250.5 }];
+  assert.deepEqual(editHolding(start, "VTI", undefined, { costCurrency: "AUD" }, "USD")[0].costCurrency, "AUD");
+  assert.deepEqual(editHolding(start, "VTI", undefined, { costCurrency: "USD" }, null)[0].costCurrency, "USD");
+  assert.deepEqual(editHolding(start, "VTI", undefined, { costCurrency: "USD" })[0].costCurrency, "USD");
 });
 
-test("withoutListingCostCurrency never touches crypto, whose costCurrency is always stored", () => {
-  const start = [{ asset: "crypto:solana", quantity: 1, cost: 1, costCurrency: "USD" }];
-  assert.equal(withoutListingCostCurrency(start, { "crypto:solana": "USD" }), start);
+test("editHolding never omits a crypto costCurrency, which has no listing currency", () => {
+  const start = [{ asset: "crypto:solana", quantity: 1, cost: 1, costCurrency: "AUD" }];
+  assert.deepEqual(editHolding(start, "crypto:solana", "AUD", { quantity: 2 }, "AUD"),
+    [{ asset: "crypto:solana", quantity: 2, cost: 1, costCurrency: "AUD" }]);
 });
 
-test("withoutListingCostCurrency output merges with an existing listing-currency entry on save", () => {
-  const start = [
-    { asset: "VTI", quantity: 10, cost: 200 },
-    { asset: "VTI", quantity: 10, cost: 300, costCurrency: "USD" },
-  ];
-  const parsed = parseHoldings(serializeHoldings(withoutListingCostCurrency(start, { VTI: "USD" })));
-  assert.equal(parsed.ok, true);
-  assert.deepEqual(parsed.ok && parsed.holdings, [{ asset: "VTI", quantity: 20, cost: 250 }]);
+test("an amount edit of a row drops that row's redundant costCurrency", () => {
+  const start = [{ asset: "VTI", quantity: 10, cost: 250.5, costCurrency: "USD" }];
+  assert.deepEqual(editHolding(start, "VTI", "USD", { quantity: 11 }, "USD"), [{ asset: "VTI", quantity: 11, cost: 250.5 }]);
+});
+
+test("an unrelated row's redundant costCurrency survives a save of another row", () => {
+  const vti = { asset: "VTI", quantity: 10, cost: 250.5, costCurrency: "USD" };
+  const start = [vti, { asset: "VOO", quantity: 12, cost: 410.25 }];
+  const out = editHolding(start, "VOO", undefined, { quantity: 13 }, "USD");
+  assert.equal(out[0], vti);
+  assert.equal(out[0].costCurrency, "USD");
+  assert.deepEqual(out[1], { asset: "VOO", quantity: 13, cost: 410.25 });
+  assert.match(serializeHoldings(out), /"asset": "VTI", "quantity": 10, "cost": 250.5, "costCurrency": "USD"/);
+});
+
+test("the edited row keeps its explicit listing currency rather than merge into another row", () => {
+  const plain = { asset: "VTI", quantity: 10, cost: 200 };
+  const start = [plain, { asset: "VTI", quantity: 10, cost: 300, costCurrency: "AUD" }];
+  // ▾ to USD (the listing currency) while a plain VTI row exists: kept explicit, no merge.
+  const picked = editHolding(start, "VTI", "AUD", { costCurrency: "USD" }, "USD");
+  assert.equal(picked[0], plain);
+  assert.deepEqual(picked[1], { asset: "VTI", quantity: 10, cost: 300, costCurrency: "USD" });
+  const parsed = parseHoldings(serializeHoldings(picked));
+  assert.equal(parsed.ok && parsed.merged, 0);
+  assert.equal(parsed.ok && parsed.holdings.length, 2);
+  // An amount edit of that row keeps it explicit too.
+  const edited = editHolding(picked, "VTI", "USD", { quantity: 11 }, "USD");
+  assert.equal(edited[0], plain);
+  assert.deepEqual(edited[1], { asset: "VTI", quantity: 11, cost: 300, costCurrency: "USD" });
 });
