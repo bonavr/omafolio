@@ -1,0 +1,15 @@
+{
+  "name": "omafolio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/",
+    "typecheck": "tsc -p jsconfig.json",
+    "check": "npm test && npm run typecheck && omarchy plugin validate ."
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
