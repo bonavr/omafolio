@@ -200,3 +200,17 @@ test("search drops other types and falls back to shortname and exchange", () => 
   ] });
   assert.deepEqual(yahoo.parse(searchReq, 200, body), [{ asset: "EQ", symbol: "EQ", name: "Short", kind: "stock", exchange: "NMS" }]);
 });
+
+test("asOf falls back to the last chart timestamp when regularMarketTime is missing", () => {
+  const { regularMarketTime, ...meta } = baseMeta;
+  const [q] = yahoo.parse(quotesReq, 200, spark(meta, [1, 2], [100, 200]));
+  assert.equal(q.asOf, 200000);
+  const [kept] = yahoo.parse(quotesReq, 200, spark(baseMeta, [1, 2], [100, 200]));
+  assert.equal(kept.asOf, 1000000);
+});
+
+test("a quote with neither regularMarketTime nor timestamps is omitted", () => {
+  const { regularMarketTime, ...meta } = baseMeta;
+  assert.deepEqual(yahoo.parse(quotesReq, 200, spark(meta, [], [])), []);
+  assert.deepEqual(yahoo.parse(quotesReq, 200, spark(meta, null, null)), []);
+});
