@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseHoldings, serializeHoldings, withHolding, withoutHolding, defaultCostCurrency, jsonErrorLine,
+  addHolding, editHolding, costCurrencyFor,
 } from "../lib/holdings.mjs";
 
 const SPEC_EXAMPLE = `{ "holdings": [
@@ -302,4 +303,68 @@ test("a quantity-0 entry merged with a positive one yields the positive entry's 
     assert.deepEqual(r.holdings, [{ asset: "A", quantity: 1, cost: 9 }]);
     assert.equal(r.merged, 1);
   }
+});
+
+test("addHolding appends a listing-currency stock with zero quantity and cost", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  const r = addHolding(start, "VTI", "AUD");
+  assert.equal(r.added, true);
+  assert.equal(r.index, 3);
+  assert.deepEqual(r.holdings[3], { asset: "VTI", quantity: 0, cost: 0 });
+  assert.ok(!("costCurrency" in r.holdings[3]));
+  assert.equal(start.length, 3);
+  assert.match(serializeHoldings(r.holdings), /\{ "asset": "VTI", "quantity": 0, "cost": 0 \}/);
+});
+
+test("addHolding prices new crypto in the base currency", () => {
+  const r = addHolding([], "crypto:solana", "AUD");
+  assert.deepEqual(r, { holdings: [{ asset: "crypto:solana", quantity: 0, cost: 0, costCurrency: "AUD" }], index: 0, added: true });
+});
+
+test("addHolding finds an existing holding of the same identity instead of duplicating", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  const voo = addHolding(start, "VOO", "AUD");
+  assert.deepEqual(voo, { holdings: start, index: 0, added: false });
+  const btc = addHolding(start, "crypto:bitcoin", "AUD");
+  assert.equal(btc.added, false);
+  assert.equal(btc.index, 2);
+});
+
+test("addHolding adds crypto again under a different base currency (a different identity)", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  const r = addHolding(start, "crypto:bitcoin", "USD");
+  assert.equal(r.added, true);
+  assert.deepEqual(r.holdings[3], { asset: "crypto:bitcoin", quantity: 0, cost: 0, costCurrency: "USD" });
+});
+
+test("editHolding changes quantity or cost of that identity only", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  const q = editHolding(start, "VOO", undefined, { quantity: 15 });
+  assert.deepEqual(q[0], { asset: "VOO", quantity: 15, cost: 410.25 });
+  assert.deepEqual(q.slice(1), start.slice(1));
+  const c = editHolding(start, "crypto:bitcoin", "AUD", { cost: 70000 });
+  assert.deepEqual(c[2], { asset: "crypto:bitcoin", quantity: 0.05, cost: 70000, costCurrency: "AUD" });
+  assert.equal(start[0].quantity, 12);
+});
+
+test("editHolding moves a holding to another currency in place, or back to listing", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  const usd = editHolding(start, "VOO", undefined, { costCurrency: "AUD" });
+  assert.deepEqual(usd[0], { asset: "VOO", quantity: 12, cost: 410.25, costCurrency: "AUD" });
+  const back = editHolding(usd, "VOO", "AUD", { costCurrency: undefined });
+  assert.deepEqual(back[0], { asset: "VOO", quantity: 12, cost: 410.25 });
+  assert.ok(!("costCurrency" in back[0]));
+});
+
+test("editHolding of an identity no longer held changes nothing", () => {
+  const start = parseHoldings(SPEC_EXAMPLE).holdings;
+  assert.deepEqual(editHolding(start, "VOO", "USD", { quantity: 1 }), start);
+  assert.deepEqual(editHolding(start, "AAPL", undefined, { quantity: 1 }), start);
+});
+
+test("costCurrencyFor omits the listing currency for listed assets only", () => {
+  assert.equal(costCurrencyFor("VOO", "USD", "USD"), undefined);
+  assert.equal(costCurrencyFor("VOO", "AUD", "USD"), "AUD");
+  assert.equal(costCurrencyFor("VOO", "USD", null), "USD");
+  assert.equal(costCurrencyFor("crypto:bitcoin", "AUD", "AUD"), "AUD");
 });

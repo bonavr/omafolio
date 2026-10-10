@@ -97,3 +97,11 @@ test("defaults are not mutated by returned settings", () => {
   settings.bar.push("X");
   assert.deepEqual(DEFAULTS.bar, ["crypto:bitcoin"]);
 });
+
+test("constants the settings page shares", async () => {
+  const s = await import("../lib/settings.mjs");
+  assert.equal(s.MIN_REFRESH_SECONDS, 60);
+  assert.equal(s.MIN_ROTATE_SECONDS, 2);
+  assert.deepEqual([...s.RANGES], ["1D", "1W", "1M", "1Y"]);
+  assert.equal(s.REFRESH_MIN_NOTE, normalizeSettings({ refreshSeconds: 1 }).notes[0]);
+});

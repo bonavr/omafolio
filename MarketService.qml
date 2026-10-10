@@ -37,9 +37,9 @@ QtObject {
   // ---- Inputs
 
   // The widget's settings entry, raw or already normalised (normalising is
-  // idempotent); bad values are replaced and explained in `notes`. Null until a
-  // widget supplies it, and nothing is fetched before then, so the defaults are
-  // never fetched by mistake. Every widget pushes the same bar entry.
+  // idempotent); bad values are replaced and explained in `settingsNotes`. Null
+  // until a widget supplies it, and nothing is fetched before then, so the
+  // defaults are never fetched by mistake. Every widget pushes the same entry.
   property var settings: null
   // Whether any panel is showing. Each monitor's widget has its own panel, and
   // they overlap: moving the popout to another monitor opens the new panel
@@ -70,16 +70,22 @@ QtObject {
     yahoo: { failures: 0, failingSince: null, lastSuccess: null },
     coingecko: { failures: 0, failingSince: null, lastSuccess: null },
   })
-  // User-facing explanations: substituted settings, merged duplicate holdings.
-  readonly property var notes: normalized.notes.concat(holdingsMerged > 0
-    ? ["portfolio.json has " + holdingsMerged + " duplicate " + (holdingsMerged === 1 ? "entry" : "entries")
-      + "; they are shown combined and saved combined on the next change."]
-    : [])
+  // User-facing explanations of settings that were substituted (string[]).
+  readonly property var settingsNotes: normalized.notes
+  // One line saying the holdings file had duplicate entries, which are shown
+  // (and saved on the next change) combined; empty when it has none.
+  readonly property string holdingsNote: holdingsMerged > 0
+    ? "Combined " + holdingsMerged + " duplicate " + (holdingsMerged === 1 ? "entry" : "entries") + " in portfolio.json."
+    : ""
   // Epoch ms of the last successful quote round of any provider, or null.
   property var lastUpdated: null
   // SearchResult[] for the latest search(): Yahoo first, then CoinGecko, one
   // per asset.
   property var searchResults: []
+  // The (trimmed) query `searchResults` answers, and whether answers to it are
+  // still coming.
+  property string searchQuery: ""
+  readonly property bool searching: searchFetcher.busy
 
   // ---- Methods
 
@@ -145,6 +151,7 @@ QtObject {
   function search(query) {
     var q = String(query === undefined || query === null ? "" : query).trim()
     var requests = q === "" ? [] : Providers.searchRequests(q)
+    searchQuery = q
     searchUrls = requests.map(function(r) { return r.url })
     searchByProvider = {}
     searchResults = []

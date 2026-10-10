@@ -92,8 +92,15 @@ Panel {
   property string selected: ""
   property string range: "1M"
   // Set by the gear. The settings page (SettingsPage.qml) replaces the body
-  // once its Loader below is active and loaded.
+  // once its Loader below has loaded it; it is created on every opening and
+  // destroyed on closing.
   property bool settingsOpen: false
+  onSettingsOpenChanged: scroller.contentY = 0
+
+  // Hands the keyboard back to the panel once a settings field is done with it.
+  function releaseFocus() {
+    keyCatcher.forceActiveFocus()
+  }
   readonly property bool settingsShown: settingsOpen && settingsLoader.status === Loader.Ready
 
   // Every open starts on the portfolio overview at the configured range.
@@ -337,14 +344,15 @@ Panel {
             }
           }
 
-          // The settings page (SettingsPage.qml); inactive until that page exists.
+          // The settings page (SettingsPage.qml).
           Loader {
             id: settingsLoader
             Layout.fillWidth: true
             Layout.topMargin: Style.space(16)
-            active: false
+            active: root.settingsOpen
             visible: root.settingsShown
             source: Qt.resolvedUrl("SettingsPage.qml")
+            onLoaded: item.panel = root
           }
 
           // ---- Hero
