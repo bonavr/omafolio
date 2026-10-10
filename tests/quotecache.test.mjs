@@ -81,3 +81,12 @@ test("serialise then parse round-trips, dropping fromCache on the way out", () =
 test("serialising the same quotes gives the same text, so unchanged caches are not rewritten", () => {
   assert.equal(serializeQuoteCache({ VOO: voo() }), serializeQuoteCache({ VOO: { ...voo(), fromCache: true } }));
 });
+
+test("a day range survives the round trip; a malformed one makes the entry invalid", () => {
+  const ranged = { ...voo(), dayRange: { low: 712.54, high: 716.43 } };
+  assert.deepEqual(parseQuoteCache(serializeQuoteCache({ VOO: ranged })).VOO.dayRange, ranged.dayRange);
+  assert.deepEqual(Object.keys(parseQuoteCache(cacheWith({ VOO: { ...voo(), dayRange: { low: 5, high: 5 } } }))), ["VOO"]);
+  for (const dayRange of [null, "1-2", [1, 2], { low: 5.01, high: 5 }, { low: 1 }, { low: "1", high: 2 }]) {
+    assert.deepEqual(parseQuoteCache(cacheWith({ VOO: { ...voo(), dayRange } })), {}, JSON.stringify(dayRange));
+  }
+});

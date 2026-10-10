@@ -126,3 +126,12 @@ test("search skips entries without an id", () => {
   const body = JSON.stringify({ coins: [{ name: "N", symbol: "N" }, { id: "n", name: "N", symbol: "N" }] });
   assert.deepEqual(coingecko.parse(searchReq, 200, body).map((r) => r.asset), ["crypto:n"]);
 });
+
+test("day range is the 24-hour low and high when both are given with low <= high", () => {
+  const [q] = coingecko.parse(marketsReq, 200, fixture("markets.json")).filter((q) => q.asset === "crypto:bitcoin");
+  assert.deepEqual(q.dayRange, { low: fixtureBtc.low_24h, high: fixtureBtc.high_24h });
+  assert.deepEqual(coingecko.parse(xReq, 200, market({ low_24h: 9, high_24h: 9 }))[0].dayRange, { low: 9, high: 9 });
+  assert.equal("dayRange" in coingecko.parse(xReq, 200, market({ low_24h: 9.01, high_24h: 9 }))[0], false);
+  assert.equal("dayRange" in coingecko.parse(xReq, 200, market({ low_24h: 9 }))[0], false);
+  assert.equal("dayRange" in coingecko.parse(xReq, 200, market({ low_24h: null, high_24h: 11 }))[0], false);
+});

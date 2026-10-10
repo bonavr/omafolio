@@ -8,6 +8,13 @@ import {
   formatChange,
   formatSigned,
   assetLabel,
+  changeDirection,
+  formatWeekday,
+  formatClock,
+  formatDayClock,
+  formatWhen,
+  formatQuantity,
+  formatDayRange,
 } from "../lib/format.mjs";
 
 test("prefix is plain when currency is the base, explicit otherwise", () => {
@@ -138,4 +145,52 @@ test("labels: ₿ for bitcoin, symbol otherwise", () => {
   assert.equal(assetLabel({ asset: "crypto:bitcoin", symbol: "BTC" }), "₿");
   assert.equal(assetLabel({ asset: "crypto:ethereum", symbol: "ETH" }), "ETH");
   assert.equal(assetLabel({ asset: "VOO", symbol: "VOO" }), "VOO");
+});
+
+test("change direction follows the arrow", () => {
+  assert.equal(changeDirection("▲ 1.4%"), "up");
+  assert.equal(changeDirection("▼ 0.1%"), "down");
+  assert.equal(changeDirection("— 0.0%"), "flat");
+  assert.equal(changeDirection("—"), "flat");
+});
+
+test("times are local: weekday, 24-hour clock with leading zeros, both", () => {
+  const fri = new Date(2026, 9, 9, 7, 5).getTime();
+  assert.equal(formatWeekday(fri), "Fri");
+  assert.equal(formatClock(fri), "07:05");
+  assert.equal(formatClock(new Date(2026, 9, 9, 23, 59).getTime()), "23:59");
+  assert.equal(formatDayClock(fri), "Fri 07:05");
+});
+
+test("formatWhen drops the weekday only on the same local day", () => {
+  const now = new Date(2026, 9, 10, 14, 0).getTime();
+  assert.equal(formatWhen(new Date(2026, 9, 10, 0, 0).getTime(), now), "00:00");
+  assert.equal(formatWhen(new Date(2026, 9, 9, 23, 59).getTime(), now), "Fri 23:59");
+  assert.equal(formatWhen(now, now), "14:00");
+});
+
+test("quantities keep up to 8 decimals without trailing zeros", () => {
+  assert.equal(formatQuantity(12), "12");
+  assert.equal(formatQuantity(30.512), "30.512");
+  assert.equal(formatQuantity(0.05), "0.05");
+  assert.equal(formatQuantity(1250.5), "1,250.5");
+  assert.equal(formatQuantity(0.1 + 0.2), "0.3");
+  assert.equal(formatQuantity(0.00000001), "0.00000001");
+  assert.equal(formatQuantity(0.000000004), "0");
+  assert.equal(formatQuantity(-2.5), "-2.5");
+  assert.equal(formatQuantity(NaN), "—");
+});
+
+test("day range: two prices without prefix, dash when either is unusable", () => {
+  assert.equal(formatDayRange(712.54, 716.433, "USD"), "712.54–716.43");
+  assert.equal(formatDayRange(117399, 119396, "AUD"), "117.4k–119.4k");
+  // 13 characters is the longest full form; one more goes compact.
+  assert.equal(formatDayRange(1000, 99999, "USD"), "1,000–99,999");
+  assert.equal(formatDayRange(10000, 99999, "USD"), "10,000–99,999");
+  assert.equal(formatDayRange(10000, 100000, "USD"), "10k–100k");
+  assert.equal(formatDayRange(999.5, 100000, "USD"), "999.50–100k");
+  assert.equal(formatDayRange(0.5, 0.52, "USD"), "0.5000–0.5200");
+  assert.equal(formatDayRange(0, 1, "USD"), "0.00–1.00");
+  assert.equal(formatDayRange(-1, 1, "USD"), "—");
+  assert.equal(formatDayRange(1, Infinity, "USD"), "—");
 });

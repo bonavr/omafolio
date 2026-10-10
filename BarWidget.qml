@@ -7,7 +7,8 @@ import "lib/barframe.mjs" as BarFrame
 // day move), with an `i/N` badge when there is more than one. Closed markets
 // are dimmed with a sleep glyph, stale or excluded data adds a warning glyph
 // and an explanatory tooltip. Left click toggles the panel, middle click
-// refreshes, the wheel steps through the items, and hovering pauses rotation.
+// refreshes, the wheel steps through the items, and hovering (or an open
+// panel) pauses rotation.
 //
 // Owns nothing but presentation: prices come from the shell's single
 // MarketService, and what each frame says is decided by lib/barframe.mjs.
@@ -82,7 +83,9 @@ BarWidget {
   Timer {
     id: rotation
     interval: root.market ? root.market.config.rotateSeconds * 1000 : 5000
-    running: root.count > 1 && !root.hovered && !root.wheelPaused
+    // Held while the panel is open: it is anchored to the pill, which changes
+    // width with each frame.
+    running: root.count > 1 && !root.hovered && !root.wheelPaused && !root.opened
     repeat: true
     onTriggered: root.index = (root.shown + 1) % root.count
   }
@@ -205,11 +208,10 @@ BarWidget {
     onTriggered: root.bindMarket()
   }
 
-  // Inactive until the panel exists; then Panel.qml is loaded and handed
-  // bar, settings, anchorItem, hostWidget and market.
+  // The panel (Panel.qml), handed bar, settings, anchorItem, hostWidget and
+  // market whenever they change.
   Loader {
     id: panelLoader
-    active: false
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
     onLoaded: {

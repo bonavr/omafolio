@@ -214,3 +214,18 @@ test("a quote with neither regularMarketTime nor timestamps is omitted", () => {
   assert.deepEqual(yahoo.parse(quotesReq, 200, spark(meta, [], [])), []);
   assert.deepEqual(yahoo.parse(quotesReq, 200, spark(meta, null, null)), []);
 });
+
+test("day range comes from the session low and high; funds have none", () => {
+  const q = byAsset(yahoo.parse(quotesReq, 200, fixture("spark-quotes.json")));
+  assert.deepEqual(q.VOO.dayRange, { low: 712.54, high: 716.433 });
+  assert.equal("dayRange" in q.VTSAX, false);
+});
+
+test("day range needs both ends with low <= high, and is scaled for minor units", () => {
+  const parse = (meta) => yahoo.parse(quotesReq, 200, spark(meta))[0];
+  assert.deepEqual(parse({ ...baseMeta, regularMarketDayLow: 5, regularMarketDayHigh: 5 }).dayRange, { low: 5, high: 5 });
+  assert.equal("dayRange" in parse({ ...baseMeta, regularMarketDayLow: 5.01, regularMarketDayHigh: 5 }), false);
+  assert.equal("dayRange" in parse({ ...baseMeta, regularMarketDayLow: 5 }), false);
+  assert.equal("dayRange" in parse({ ...baseMeta, regularMarketDayLow: "4", regularMarketDayHigh: 5 }), false);
+  assert.deepEqual(parse({ ...baseMeta, currency: "GBp", regularMarketDayLow: 150, regularMarketDayHigh: 250 }).dayRange, { low: 1.5, high: 2.5 });
+});
