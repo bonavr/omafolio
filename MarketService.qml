@@ -41,8 +41,11 @@ QtObject {
   // widget supplies it, and nothing is fetched before then, so the defaults are
   // never fetched by mistake. Every widget pushes the same bar entry.
   property var settings: null
-  // Whether the panel is showing. history() fetches only while it is.
-  property bool panelOpen: false
+  // Whether any panel is showing. Each monitor's widget has its own panel, and
+  // they overlap: moving the popout to another monitor opens the new panel
+  // before the bar closes the old one. history() fetches only while one is
+  // showing. Panels report themselves with panelOpened/panelClosed.
+  readonly property bool panelOpen: openPanels.length > 0
 
   // ---- Outputs
 
@@ -94,6 +97,18 @@ QtObject {
       }
     }
     return started
+  }
+
+  // A panel (any object, used as its identity) is now showing. Repeats are
+  // ignored, so a panel may report the same state more than once.
+  function panelOpened(panel) {
+    if (openPanels.indexOf(panel) < 0) openPanels = openPanels.concat([panel])
+  }
+
+  // `panel` is no longer showing, or is being destroyed. Unknown panels are
+  // ignored.
+  function panelClosed(panel) {
+    if (openPanels.indexOf(panel) >= 0) openPanels = openPanels.filter(function(p) { return p !== panel })
   }
 
   // Price history of `assets` (AssetRef[]) over `range` ("1D"|"1W"|"1M"|"1Y"):
@@ -189,6 +204,9 @@ QtObject {
   property var historyPending: ({})
   property var historyQueue: []
   property var historyCurrent: null
+
+  // Panels that have reported themselves open and not yet closed.
+  property var openPanels: []
 
   property var searchUrls: []
   property var searchByProvider: ({})

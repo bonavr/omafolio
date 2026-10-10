@@ -68,9 +68,21 @@ Panel {
     if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function") root.bar.setCenterHoverRevealSuppressed(value)
   }
 
-  // MarketService fetches history only while a panel is showing.
-  onOpenedChanged: if (market) market.panelOpen = opened
-  onMarketChanged: if (market) market.panelOpen = opened
+  // MarketService fetches history while any monitor's panel is showing; this
+  // panel reports only its own state, to the service it last reported to.
+  property var reportedOpenTo: null
+
+  function reportOpen() {
+    var service = opened ? market : null
+    if (reportedOpenTo === service) return
+    if (reportedOpenTo) reportedOpenTo.panelClosed(root)
+    if (service) service.panelOpened(root)
+    reportedOpenTo = service
+  }
+
+  onOpenedChanged: reportOpen()
+  onMarketChanged: reportOpen()
+  Component.onDestruction: if (reportedOpenTo) reportedOpenTo.panelClosed(root)
 
   // ---- View state
 

@@ -242,6 +242,9 @@ test("portfolio series waits for every valued holding, ignores excluded ones", (
   delete partial.VTSAX;
   assert.equal(portfolioSeries(d, partial, "1M"), null);
   assert.equal(portfolioSeries(d, Object.assign({}, all, { VTSAX: series("VTSAX", []) }), "1M"), null);
+  // One point is not history yet (the same threshold chartNote uses); two are.
+  assert.equal(portfolioSeries(d, Object.assign({}, all, { VTSAX: series("VTSAX", [185]) }), "1M"), null);
+  assert.notEqual(portfolioSeries(d, Object.assign({}, all, { VTSAX: series("VTSAX", [180, 185], "USD", 0, 86400000) }), "1M"), null);
   assert.equal(portfolioSeries(make({ holdings: [] }), all, "1M"), null);
 });
 
