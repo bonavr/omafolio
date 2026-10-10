@@ -13,9 +13,9 @@ const SPEC_EXAMPLE = `{ "holdings": [
 const one = (extra = {}) => JSON.stringify({ holdings: [{ asset: "VOO", quantity: 1, cost: 1, ...extra }] });
 
 test("null or empty text is an empty portfolio", () => {
-  assert.deepEqual(parseHoldings(null), { ok: true, holdings: [] });
-  assert.deepEqual(parseHoldings(""), { ok: true, holdings: [] });
-  assert.deepEqual(parseHoldings("  \n"), { ok: true, holdings: [] });
+  assert.deepEqual(parseHoldings(null), { ok: true, holdings: [], merged: 0 });
+  assert.deepEqual(parseHoldings(""), { ok: true, holdings: [], merged: 0 });
+  assert.deepEqual(parseHoldings("  \n"), { ok: true, holdings: [], merged: 0 });
 });
 
 test("reads the documented format", () => {
@@ -56,7 +56,7 @@ test("top level must be an object with a holdings array", () => {
     assert.equal(r.ok, false, text);
     assert.equal(r.line, null);
   }
-  assert.deepEqual(parseHoldings('{"holdings":[]}'), { ok: true, holdings: [] });
+  assert.deepEqual(parseHoldings('{"holdings":[]}'), { ok: true, holdings: [], merged: 0 });
 });
 
 test("entries with a missing asset or non-numeric quantity are an error, not dropped", () => {
@@ -104,6 +104,7 @@ test("costCurrency, when present, is a non-empty string stored upper-case", () =
 test("duplicates with the same cost currency merge with weighted cost", () => {
   const r = parseHoldings('{"holdings":[{"asset":"VOO","quantity":10,"cost":400},{"asset":"VOO","quantity":10,"cost":420}]}');
   assert.deepEqual(r.holdings, [{ asset: "VOO", quantity: 20, cost: 410 }]);
+  assert.equal(r.merged, 1);
 });
 
 test("merge weights by quantity and keeps first-seen position", () => {
@@ -170,7 +171,7 @@ test("serialised layout matches the documented shape exactly", () => {
 test("an empty list serialises to a two-line object that parses back empty", () => {
   const text = serializeHoldings([]);
   assert.equal(text, '{ "holdings": [\n]}\n');
-  assert.deepEqual(parseHoldings(text), { ok: true, holdings: [] });
+  assert.deepEqual(parseHoldings(text), { ok: true, holdings: [], merged: 0 });
 });
 
 test("the spec example round-trips", () => {
@@ -225,4 +226,50 @@ test("crypto cost defaults to base; stocks to listing currency", () => {
   assert.equal(defaultCostCurrency("crypto:bitcoin", "AUD"), "AUD");
   assert.equal(defaultCostCurrency("VOO", "AUD"), undefined);
   assert.equal(defaultCostCurrency("crypto", "AUD"), undefined);
+});
+
+test("unknown keys on an entry are an error naming the entry and key", () => {
+  const r = parseHoldings('{"holdings":[{"asset":"A","quantity":1,"cost":1},{"asset":"B","quantity":1,"cost":1,"note":"x"}]}');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /entry 2/);
+  assert.match(r.error, /"note"/);
+  assert.equal(r.line, null);
+  assert.equal(parseHoldings(one({ costCurrency: "AUD" })).ok, true);
+});
+
+test("merging that overflows to Infinity is an error naming the asset", () => {
+  const big = JSON.stringify({ holdings: [
+    { asset: "BIG", quantity: 1e308, cost: 1 },
+    { asset: "BIG", quantity: 1e308, cost: 1 },
+  ] });
+  const r = parseHoldings(big);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /BIG/);
+  assert.equal(r.line, null);
+});
+
+test("weighted cost does not overflow on large costs", () => {
+  const r = parseHoldings(JSON.stringify({ holdings: [
+    { asset: "A", quantity: 1e200, cost: 1e200 },
+    { asset: "A", quantity: 1e200, cost: 1e200 },
+  ] }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.holdings, [{ asset: "A", quantity: 2e200, cost: 1e200 }]);
+});
+
+test("merged counts entries folded into earlier ones", () => {
+  const mk = (n) => parseHoldings(JSON.stringify({ holdings: Array.from({ length: n }, () => ({ asset: "A", quantity: 1, cost: 1 })).concat([{ asset: "B", quantity: 1, cost: 1 }]) }));
+  assert.equal(mk(1).merged, 0);
+  assert.equal(mk(2).merged, 1);
+  assert.equal(mk(3).merged, 2);
+  assert.equal(parseHoldings(SPEC_EXAMPLE).merged, 0);
+});
+
+test("a quantity-0 entry merged with a positive one yields the positive entry's cost", () => {
+  for (const order of [[0, 1], [1, 0]]) {
+    const entries = order.map((q) => ({ asset: "A", quantity: q, cost: q === 0 ? 7 : 9 }));
+    const r = parseHoldings(JSON.stringify({ holdings: entries }));
+    assert.deepEqual(r.holdings, [{ asset: "A", quantity: 1, cost: 9 }]);
+    assert.equal(r.merged, 1);
+  }
 });
