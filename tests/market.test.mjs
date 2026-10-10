@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  assetsToFetch, fxPairs, priceState, nextDelayMs, mergeQuotes, notFound,
+  assetsToFetch, fxPairs, priceState, nextDelayMs, mergeQuotes, notFound, keptSeries, inBackoff,
   recordSuccess, recordFailure, canFetchNow, STALE_AFTER_MS, CLOSED_POLL_MS, MAX_BACKOFF_MS,
 } from "../lib/market.mjs";
 
@@ -120,17 +120,73 @@ test("mergeQuotes does not mutate previous and drops fromCache of replaced quote
   assert.equal("fromCache" in m.VOO, false);
 });
 
-test("notFound is requested minus returned", () => assert.deepEqual(notFound(["VOO", "VOOO"], [q("VOO", "USD")]), ["VOOO"]));
+test("notFound: only requested assets with no quote at all, fresh or cached", () => {
+  assert.deepEqual(notFound(["VOO", "VOOO"], { VOO: q("VOO", "USD") }), ["VOOO"]);
+  // A response that omits an asset with a last good (or cached) quote leaves it priced.
+  const held = mergeQuotes({ AAPL: q("AAPL", "USD"), MSFT: { ...q("MSFT", "USD"), fromCache: true } }, [q("VOO", "USD")]);
+  assert.deepEqual(notFound(["VOO", "AAPL", "MSFT", "VOOO"], held), ["VOOO"]);
+  assert.deepEqual(notFound([], held), []);
+  assert.deepEqual(notFound(["VOO"], {}), ["VOO"]);
+  // Only requested assets are reported.
+  assert.deepEqual(notFound(["AAPL"], { VOO: q("VOO", "USD") }), ["AAPL"]);
+  // Inherited keys are not quotes.
+  assert.deepEqual(notFound(["toString"], {}), ["toString"]);
+});
+
+test("keptSeries: the answer's series, else the previous one", () => {
+  const old = { asset: "VOO", currency: "USD", points: [[1, 1]] };
+  const fresh = { asset: "VOO", currency: "USD", points: [[2, 2]] };
+  const other = { asset: "AAPL", currency: "USD", points: [[3, 3]] };
+  assert.equal(keptSeries(old, [fresh, other], "VOO"), fresh);
+  assert.equal(keptSeries(null, [fresh], "VOO"), fresh);
+  // A successful answer that leaves the asset out keeps what was held.
+  assert.equal(keptSeries(old, [other], "VOO"), old);
+  assert.equal(keptSeries(old, [], "VOO"), old);
+  assert.equal(keptSeries(null, [other], "VOO"), null);
+  // A failed request keeps it too.
+  assert.equal(keptSeries(old, null, "VOO"), old);
+  assert.equal(keptSeries(null, null, "VOO"), null);
+});
+
+test("inBackoff: from the latest failure until nextDelayMs's backoff has passed", () => {
+  const after = (n, at) => ({ failures: n, failingSince: T0, lastSuccess: null, lastFailure: at });
+  // One failure: 60 s.
+  assert.equal(inBackoff(after(1, T0), T0), true);
+  assert.equal(inBackoff(after(1, T0), T0 + 59999), true);
+  assert.equal(inBackoff(after(1, T0), T0 + 60000), false);
+  // The window counts from the latest failure, not the first.
+  assert.equal(inBackoff(after(2, T0 + H), T0 + H + 119999), true);
+  assert.equal(inBackoff(after(2, T0 + H), T0 + H + 120000), false);
+  // Capped like the poll backoff.
+  assert.equal(inBackoff(after(9, T0), T0 + MAX_BACKOFF_MS - 1), true);
+  assert.equal(inBackoff(after(9, T0), T0 + MAX_BACKOFF_MS), false);
+  // Same window the feed waits before retrying.
+  for (const n of [1, 2, 3, 4, 5, 6]) {
+    const d = nextDelayMs("coingecko", {}, after(n, T0), 60, T0);
+    assert.equal(inBackoff(after(n, T0), T0 + d - 1), true);
+    assert.equal(inBackoff(after(n, T0), T0 + d), false);
+  }
+  // Failure count boundary, whatever lastFailure says: 0 is not resting, 1 is.
+  assert.equal(inBackoff({ failures: 0, failingSince: null, lastSuccess: T0, lastFailure: T0 }, T0), false);
+  assert.equal(inBackoff({ failures: 1, failingSince: T0, lastSuccess: T0, lastFailure: T0 }, T0), true);
+  // Healthy, never failed, or unknown: never in backoff.
+  assert.equal(inBackoff({ failures: 0, failingSince: null, lastSuccess: T0, lastFailure: null }, T0), false);
+  assert.equal(inBackoff(recordSuccess(after(3, T0), T0 + 1), T0 + 2), false);
+  assert.equal(inBackoff(undefined, T0), false);
+  // Straight from recordFailure.
+  assert.equal(inBackoff(recordFailure(undefined, T0), T0 + 59999), true);
+  assert.equal(inBackoff(recordFailure(undefined, T0), T0 + 60000), false);
+});
 
 test("health transitions", () => {
-  const start = { failures: 0, failingSince: null, lastSuccess: 5 };
+  const start = { failures: 0, failingSince: null, lastSuccess: 5, lastFailure: null };
   const f1 = recordFailure(start, 100);
-  assert.deepEqual(f1, { failures: 1, failingSince: 100, lastSuccess: 5 });
-  assert.deepEqual(recordFailure(f1, 200), { failures: 2, failingSince: 100, lastSuccess: 5 });
-  assert.deepEqual(recordSuccess(f1, 300), { failures: 0, failingSince: null, lastSuccess: 300 });
-  assert.deepEqual(start, { failures: 0, failingSince: null, lastSuccess: 5 });
-  assert.deepEqual(recordFailure(undefined, 7), { failures: 1, failingSince: 7, lastSuccess: null });
-  assert.deepEqual(recordSuccess(undefined, 7), { failures: 0, failingSince: null, lastSuccess: 7 });
+  assert.deepEqual(f1, { failures: 1, failingSince: 100, lastSuccess: 5, lastFailure: 100 });
+  assert.deepEqual(recordFailure(f1, 200), { failures: 2, failingSince: 100, lastSuccess: 5, lastFailure: 200 });
+  assert.deepEqual(recordSuccess(f1, 300), { failures: 0, failingSince: null, lastSuccess: 300, lastFailure: null });
+  assert.deepEqual(start, { failures: 0, failingSince: null, lastSuccess: 5, lastFailure: null });
+  assert.deepEqual(recordFailure(undefined, 7), { failures: 1, failingSince: 7, lastSuccess: null, lastFailure: 7 });
+  assert.deepEqual(recordSuccess(undefined, 7), { failures: 0, failingSince: null, lastSuccess: 7, lastFailure: null });
 });
 
 test("manual refresh inside the window is refused", () => {

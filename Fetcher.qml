@@ -14,7 +14,10 @@ import Quickshell.Io
 //   queued one). A queued job identical to the one just completed is dropped:
 //   its answer is already the freshest there is.
 // - Every request has a 15 s timeout and a 2 MiB body cap, and sends a generic
-//   user agent and no cookies.
+//   user agent and no cookies. curl runs with -q, so ~/.curlrc cannot add
+//   cookies, headers or options that change what comes back.
+// - A curl that cannot be started counts as a failed request, so done() always
+//   follows.
 QtObject {
   id: fetcher
 
@@ -58,7 +61,8 @@ QtObject {
   function runCurrent() {
     exitSeen = false
     stdoutSeen = false
-    proc.command = ["curl", "-sS", "--max-time", "15", "--max-filesize", "2097152",
+    // -q must come first: it stops curl reading ~/.curlrc.
+    proc.command = ["curl", "-q", "-sS", "--max-time", "15", "--max-filesize", "2097152",
       "-A", "Mozilla/5.0", "-w", "\n%{http_code}", job[index].url]
     proc.running = true
   }
@@ -113,6 +117,16 @@ QtObject {
       // A crashed or killed curl counts as a failure even if it reports code 0.
       fetcher.exitCode = exitStatus === 0 ? code : -1
       fetcher.exitSeen = true
+      fetcher.answer()
+    }
+    // A curl that fails to start (not installed) reports neither exited nor
+    // its stdout, only running turning false; answer it as a failed exit.
+    // After a real exit this arrives with exitSeen already set.
+    onRunningChanged: {
+      if (running || fetcher.exitSeen || !fetcher.busy) return
+      fetcher.exitCode = -1
+      fetcher.exitSeen = true
+      fetcher.stdoutSeen = true
       fetcher.answer()
     }
   }

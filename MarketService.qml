@@ -67,16 +67,18 @@ QtObject {
   readonly property var portfolio: Portfolio.valuePortfolio(holdings, quotes, states, config.baseCurrency)
   // Health (lib/types.mjs) per provider id: {yahoo: Health, coingecko: Health}.
   property var providerHealth: ({
-    yahoo: { failures: 0, failingSince: null, lastSuccess: null },
-    coingecko: { failures: 0, failingSince: null, lastSuccess: null },
+    yahoo: { failures: 0, failingSince: null, lastSuccess: null, lastFailure: null },
+    coingecko: { failures: 0, failingSince: null, lastSuccess: null, lastFailure: null },
   })
   // User-facing explanations of settings that were substituted (string[]).
   readonly property var settingsNotes: normalized.notes
-  // One line saying the holdings file had duplicate entries, which are shown
-  // (and saved on the next change) combined; empty when it has none.
-  readonly property string holdingsNote: holdingsMerged > 0
+  // Sentences about the holdings file that do not block editing: the last save
+  // failed (the shown holdings are then the file's), and the file had duplicate
+  // entries, which are shown (and saved on the next change) combined. Empty when
+  // there is nothing to say.
+  readonly property string holdingsNote: [holdingsWriteError, holdingsMerged > 0
     ? "Combined " + holdingsMerged + " duplicate " + (holdingsMerged === 1 ? "entry" : "entries") + " in portfolio.json."
-    : ""
+    : ""].filter(function(line) { return line !== "" }).join(" ")
   // Epoch ms of the last successful quote round of any provider, or null.
   property var lastUpdated: null
   // SearchResult[] for the latest search(): Yahoo first, then CoinGecko, one
@@ -120,8 +122,10 @@ QtObject {
   // Price history of `assets` (AssetRef[]) over `range` ("1D"|"1W"|"1M"|"1Y"):
   // Record<AssetRef, Series> holding the cached series that exist. While the
   // panel is open, series that are absent or older than refreshSeconds are
-  // fetched in the background; bindings that call this re-evaluate when they
-  // land. An asset the provider has no history for is absent from the result.
+  // fetched in the background, except from a provider resting after a failed
+  // quote or history request (market.inBackoff); bindings that call this
+  // re-evaluate when they land. An asset the provider has no history for is
+  // absent from the result.
   function history(assets, range) {
     var cache = historyCache
     var now = clock
@@ -133,7 +137,7 @@ QtObject {
       var key = historyKey(base, range, asset)
       var entry = cache[key]
       if (entry && entry.series) out[asset] = entry.series
-      if (panelOpen && !historyPending[key] && (!entry || now - entry.at >= maxAge)) due.push(asset)
+      if (panelOpen && !historyPending[key] && (!entry || now - entry.at >= maxAge) && !historyResting(Providers.providerFor(asset).id, now)) due.push(asset)
     }
     if (due.length > 0) {
       for (const request of Providers.historyRequests(due, range, base, kindOf)) {
@@ -200,6 +204,8 @@ QtObject {
   // Text of the holdings file as last read or written; null forces a re-parse.
   property var holdingsText: null
   property int holdingsMerged: 0
+  // Why the last holdings save failed, for holdingsNote; empty once one succeeds.
+  property string holdingsWriteError: ""
 
   // Quote cache text as last read or written, to skip unchanged writes.
   property string cacheText: ""
@@ -211,6 +217,9 @@ QtObject {
   property var historyPending: ({})
   property var historyQueue: []
   property var historyCurrent: null
+  // Health of history requests per provider id (lib/types.mjs Health), kept
+  // apart from providerHealth, which describes quotes to the user.
+  property var historyHealth: ({})
 
   // Panels that have reported themselves open and not yet closed.
   property var openPanels: []
@@ -254,10 +263,10 @@ QtObject {
   }
 
   // Merges a provider's answer to `requested` (AssetRef[]); requested assets
-  // it left out are marked not found until a later answer includes them.
+  // that still have no quote at all are marked not found until one arrives.
   function acceptQuotes(requested, fresh) {
     quotes = Market.mergeQuotes(quotes, fresh)
-    var missing = Market.notFound(requested, fresh)
+    var missing = Market.notFound(requested, quotes)
     var next = Object.assign({}, notFoundAssets)
     for (const asset of requested) {
       if (missing.indexOf(asset) >= 0) next[asset] = true
@@ -321,10 +330,17 @@ QtObject {
     return base + "|" + range + "|" + asset
   }
 
+  // Whether `provider` (an id) is resting after a failed quote or history
+  // request, so its history must not be requested at `now`.
+  function historyResting(provider, now) {
+    return Market.inBackoff(providerHealth[provider], now) || Market.inBackoff(historyHealth[provider], now)
+  }
+
   // Records the answer to the history request in flight: `series` is the
-  // parsed Series[], or null when the request failed, in which case the last
-  // good series are kept. Either way the attempt time is recorded, so a failing
-  // request is retried after refreshSeconds rather than at once.
+  // parsed Series[], or null when the request failed. A series is replaced only
+  // by a new one for the same asset, never by a failure or an omission. The
+  // attempt time is recorded either way, and a failure also rests the
+  // provider's history (historyHealth), so it is not retried at once.
   function storeHistory(series) {
     var current = historyCurrent
     var request = current.request
@@ -332,12 +348,15 @@ QtObject {
     var next = Object.assign({}, historyCache)
     for (const asset of request.assets) {
       var key = historyKey(current.base, request.range, asset)
-      var found = series ? series.find(function(s) { return s.asset === asset }) : undefined
-      var previous = next[key] ? next[key].series : null
-      next[key] = { at: now, series: series ? (found || null) : previous }
+      next[key] = { at: now, series: Market.keptSeries(next[key] ? next[key].series : null, series, asset) }
       delete historyPending[key]
     }
     historyCache = next
+    var health = Object.assign({}, historyHealth)
+    health[request.provider] = series
+      ? Market.recordSuccess(historyHealth[request.provider], now)
+      : Market.recordFailure(historyHealth[request.provider], now)
+    historyHealth = health
   }
 
   function publishSearch() {
@@ -476,13 +495,23 @@ QtObject {
     }
   }
 
-  // Feeds queued history requests to the fetcher one at a time.
+  // Feeds queued history requests to the fetcher one at a time. Requests to a
+  // provider that has started resting since they were queued are dropped (and
+  // asked for again by history() once it has rested).
   readonly property Timer historyPump: Timer {
     interval: 0
     onTriggered: {
-      if (root.historyFetcher.busy || root.historyQueue.length === 0) return
-      root.historyCurrent = root.historyQueue.shift()
-      root.historyFetcher.fetch([root.historyCurrent.request])
+      if (root.historyFetcher.busy) return
+      var now = Date.now()
+      while (root.historyQueue.length > 0) {
+        var item = root.historyQueue.shift()
+        if (!root.historyResting(item.request.provider, now)) {
+          root.historyCurrent = item
+          root.historyFetcher.fetch([item.request])
+          return
+        }
+        for (const asset of item.request.assets) delete root.historyPending[root.historyKey(item.base, item.request.range, asset)]
+      }
     }
   }
 
@@ -519,8 +548,9 @@ QtObject {
   readonly property AtomicFile holdingsWriter: AtomicFile {
     path: root.holdingsPath
     // Re-read once the last queued write has landed, so the file stays the truth.
-    onWritten: function(ok) {
-      if (!ok) console.warn("omafolio: could not write " + root.holdingsPath)
+    onWritten: function(ok, code) {
+      if (!ok) console.warn("omafolio: could not write " + root.holdingsPath + " (exit " + code + ")")
+      root.holdingsWriteError = ok ? "" : "Could not save portfolio.json (exit " + code + ")."
       if (!busy) {
         root.holdingsText = null
         root.holdingsFile.reload()
@@ -536,9 +566,9 @@ QtObject {
 
   readonly property AtomicFile cacheWriter: AtomicFile {
     path: root.cachePath
-    onWritten: function(ok) {
+    onWritten: function(ok, code) {
       if (ok) return
-      console.warn("omafolio: could not write " + root.cachePath)
+      console.warn("omafolio: could not write " + root.cachePath + " (exit " + code + ")")
       root.cacheText = ""
     }
   }
@@ -572,15 +602,18 @@ QtObject {
 
     required property string path
     // Whether a write is running or waiting.
-    readonly property bool busy: proc.running || hasPending || landing
+    readonly property bool busy: writing || hasPending || landing
     property string pending: ""
     property bool hasPending: false
+    // From starting sh until it exits or fails to start. Kept by hand because
+    // proc.running's change notification lags its value by an event-loop turn.
+    property bool writing: false
     property bool landing: false
-    property bool lastOk: true
+    property int lastCode: 0
 
-    // Emitted after each write, `ok` false when it failed (the file is then
-    // unchanged).
-    signal written(bool ok)
+    // Emitted after each write. `ok` is false when it failed (the file is then
+    // unchanged); `code` is sh's exit code, -1 when it crashed or did not start.
+    signal written(bool ok, int code)
 
     function write(text) {
       pending = text
@@ -589,7 +622,7 @@ QtObject {
     }
 
     function flush() {
-      if (proc.running || landing || !hasPending) return
+      if (writing || landing || !hasPending) return
       var text = pending
       pending = ""
       hasPending = false
@@ -598,15 +631,23 @@ QtObject {
         'umask 077; d=$(dirname -- "$0") && mkdir -p -- "$d" && t=$(mktemp -- "$d/.omafolio.XXXXXX") || exit 1; '
         + 'printf "%s" "$1" > "$t" && mv -f -- "$t" "$0" || { rm -f -- "$t"; exit 1; }',
         writer.path, text]
+      writing = true
       proc.running = true
     }
 
+    function land(code) {
+      writing = false
+      lastCode = code
+      landing = true
+      after.restart()
+    }
+
     readonly property Process proc: Process {
-      onExited: function(code, exitStatus) {
-        writer.lastOk = code === 0 && exitStatus === 0
-        writer.landing = true
-        after.restart()
-      }
+      onExited: function(code, exitStatus) { writer.land(exitStatus === 0 ? code : -1) }
+      // A process that fails to start (sh missing) never reports exited, only
+      // running turning false; that is a failed write. After a real exit,
+      // `writing` is already false by the time running changes.
+      onRunningChanged: if (!running && writer.writing) writer.land(-1)
     }
 
     // Reports and starts the next write outside Process's own signal handler.
@@ -615,7 +656,7 @@ QtObject {
       onTriggered: {
         writer.landing = false
         writer.flush()
-        writer.written(writer.lastOk)
+        writer.written(writer.lastCode === 0, writer.lastCode)
       }
     }
   }
