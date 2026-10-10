@@ -42,7 +42,12 @@ once. You can also edit the file by hand.
 | `bar` | `["crypto:bitcoin"]` | Items to rotate through, in order. `portfolio` is your total; anything else is an asset reference. |
 | `watch` | `[]` | Assets you follow without holding them. |
 
-Bad values are replaced by the default and explained on the settings page.
+Values the widget cannot use are corrected, not rejected. A `refreshSeconds`
+below 60 is used as 60 and a `rotateSeconds` below 2 as 2. A non-number, an
+unknown currency or an unknown range falls back to the default. Invalid `bar`
+and `watch` entries (anything but a non-blank string) are dropped, a `bar` or
+`watch` that is not a list is ignored, and an empty `bar` shows Bitcoin. The
+settings page notes each of these corrections except the empty-bar fallback.
 
 While every Yahoo market in play is closed, Yahoo prices are fetched every 15
 minutes instead of every `refreshSeconds`. If a provider fails, requests to it
@@ -86,7 +91,13 @@ A file that cannot be read (bad JSON, a bad entry) is never written over. The
 panel shows `portfolio.json can't be read` with the line when it can find it,
 and the holdings editor is read-only until you fix the file. Writes go to a
 temporary file in the same directory and are renamed into place, so a crash
-cannot leave a half-written file.
+cannot leave a half-written file. If a save fails, the settings page says so
+and the holdings go back to what the file holds.
+
+If `portfolio.json` is a symlink (say, into a synced folder), the first save
+replaces the link with a regular file and leaves the link's target as it was.
+This is deliberate: the plugin never writes through a symlink. Keep the real
+file at that path if you want saves to land in it.
 
 To back up your holdings, copy the file. The settings page has an "Open folder"
 button.
@@ -99,12 +110,16 @@ It holds symbols, prices and times, never quantities. It is safe to delete.
 
 - No account, sign-in, analytics or remote logging.
 - Quantities, costs, values and the holdings file never leave your machine.
-- Ticker symbols do. Prices come from Yahoo Finance and CoinGecko, requested
-  from your IP address with a generic user agent and no cookies. Either
-  provider can learn which assets you follow from those requests, though not
-  how much you hold. If that is more visibility than you accept, run your
-  traffic through a VPN. Hiding the symbols themselves is not something this
-  plugin does.
+- Ticker symbols do, and so do your base currency and what you type into the
+  settings page's search box. Prices come from Yahoo Finance and CoinGecko,
+  requested from your IP address with a generic user agent and no cookies
+  (`~/.curlrc` is not read). The base currency goes to CoinGecko as the
+  currency prices are quoted in, and to Yahoo inside exchange-rate symbols
+  such as `USDAUD=X`. Each search is sent to both providers. Either provider
+  can learn which assets you follow and your base currency from those
+  requests, though not how much you hold. If that is more visibility than you
+  accept, run your traffic through a VPN. Hiding the symbols themselves is not
+  something this plugin does.
 - `shell.json` holds the symbols in your bar and watchlist, never quantities.
   If you keep `~/.config` in a dotfiles repository, that file goes with it.
   The holdings file is under `~/.local/share` so it does not.
