@@ -103,6 +103,21 @@ test("all-unknown 404 is an empty result, not an error", () => {
   assert.deepEqual(yahoo.parse(historyReq1M, 404, fixture("spark-404.json")), []);
 });
 
+test("a 404 without Yahoo's Not Found body is a provider failure", () => {
+  const html = "<!doctype html><html><body>404 Not Found</body></html>";
+  assert.throws(() => yahoo.parse(quotesReq, 404, html), ProviderError);
+  assert.throws(() => yahoo.parse(historyReq1M, 404, html), ProviderError);
+  assert.throws(() => yahoo.parse(quotesReq, 404, ""), ProviderError);
+  // JSON, but not the unknown-symbols error.
+  assert.throws(() => yahoo.parse(quotesReq, 404, "{}"), ProviderError);
+  assert.throws(() => yahoo.parse(quotesReq, 404, '{"spark":{"result":null,"error":{"code":"Bad Request"}}}'), ProviderError);
+  assert.throws(() => yahoo.parse(quotesReq, 404, '{"finance":{"error":{"code":"Not Found"}}}'), ProviderError);
+  assert.throws(() => yahoo.parse(quotesReq, 404, "null"), ProviderError);
+  // The Not Found body only counts with a 404.
+  assert.throws(() => yahoo.parse(quotesReq, 403, fixture("spark-404.json")), ProviderError);
+  assert.throws(() => yahoo.parse(quotesReq, 200, fixture("spark-404.json")), ProviderError);
+});
+
 test("status boundaries: 404 on search and other non-200 throw", () => {
   assert.throws(() => yahoo.parse(searchReq, 404, "{}"), ProviderError);
   for (const s of [199, 201, 403, 429, 500]) assert.throws(() => yahoo.parse(quotesReq, s, fixture("spark-quotes.json")), ProviderError);
