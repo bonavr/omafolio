@@ -6,7 +6,8 @@ const FRI_1600 = new Date(2026, 9, 9, 16, 0).getTime();
 const FAIL_1402 = new Date(2026, 9, 9, 14, 2).getTime();
 const q = (asset, symbol, price, previousClose, provider, extra) =>
   Object.assign({ asset, symbol, name: symbol, price, previousClose, currency: "USD", kind: "etf", asOf: FRI_1600, session: null, provider }, extra);
-const healthy = { failures: 0, failingSince: null, lastSuccess: null };
+const healthy = { failures: 0, failingSince: null, lastSuccess: FRI_1600 };
+const fresh = { failures: 0, failingSince: null, lastSuccess: null };
 const quotes = {
   VOO: q("VOO", "VOO", 715.59, 711.28, "yahoo"),
   VTSAX: q("VTSAX", "VTSAX", 185.93, 185.93, "yahoo"),
@@ -18,7 +19,7 @@ const view = (over) => Object.assign({
 }, over);
 const data = (over) => Object.assign({
   quotes, states: { VOO: "live", VTSAX: "live", "crypto:bitcoin": "live" },
-  portfolio: view(), providerHealth: { yahoo: healthy, coingecko: healthy }, loaded: true,
+  portfolio: view(), providerHealth: { yahoo: healthy, coingecko: healthy },
 }, over);
 
 test("asset frame: label, value, change", () => {
@@ -45,8 +46,36 @@ test("stale asset: warning and tooltip, with and without a failing provider", ()
 test("missing asset: dash and not-found tooltip; still loading shows no complaint", () => {
   const f = barFrame("VOOO", data({ states: { VOOO: "missing" } }));
   assert.deepEqual([f.label, f.value, f.change, f.state, f.tooltip], ["VOOO", "—", "", "missing", "VOOO not found, not included"]);
-  const loading = barFrame("VOOO", data({ loaded: false }));
+  const loading = barFrame("VOOO", data({ providerHealth: { yahoo: fresh, coingecko: healthy } }));
   assert.deepEqual([loading.value, loading.tooltip], ["…", ""]);
+});
+
+test("missing asset whose provider's first attempt failed: dash and the outage, not 'not found'", () => {
+  const failed = { failures: 1, failingSince: FAIL_1402, lastSuccess: null };
+  const f = barFrame("VOOO", data({ states: { VOOO: "missing" }, providerHealth: { yahoo: failed, coingecko: healthy } }));
+  assert.deepEqual([f.value, f.tooltip], ["—", "Yahoo unavailable since 14:02"]);
+  // The other provider's attempt state does not matter.
+  const other = barFrame("VOOO", data({ states: { VOOO: "missing" }, providerHealth: { yahoo: healthy, coingecko: failed } }));
+  assert.equal(other.tooltip, "VOOO not found, not included");
+  const crypto = barFrame("crypto:nope", data({ states: { "crypto:nope": "missing" }, providerHealth: { yahoo: healthy, coingecko: fresh } }));
+  assert.equal(crypto.value, "…");
+});
+
+test("direction follows the arrow; flat moves and missing prices are flat", () => {
+  assert.equal(barFrame("crypto:bitcoin", data()).direction, "up");
+  const down = barFrame("VOO", data({ quotes: { VOO: q("VOO", "VOO", 700, 711, "yahoo") }, states: { VOO: "live" } }));
+  assert.deepEqual([down.direction, down.change], ["down", "▼ 1.5%"]);
+  assert.equal(barFrame("VTSAX", data()).direction, "flat");
+  assert.equal(barFrame("VOOO", data({ states: { VOOO: "missing" } })).direction, "flat");
+  assert.equal(barFrame("portfolio", data()).direction, "up");
+  assert.equal(barFrame("portfolio", data({ portfolio: view({ dayChangePct: -0.8 }) })).direction, "down");
+  assert.equal(barFrame("portfolio", data({ portfolio: view({ dayChangePct: 0.04 }) })).direction, "flat");
+});
+
+test("portfolio excluded because its provider is down names the outage", () => {
+  const failed = { failures: 2, failingSince: FAIL_1402, lastSuccess: null };
+  const f = barFrame("portfolio", data({ portfolio: view({ excluded: ["VOOO"] }), states: { VOOO: "missing" }, providerHealth: { yahoo: failed, coingecko: healthy } }));
+  assert.equal(f.tooltip, "Yahoo unavailable since 14:02");
 });
 
 test("a zero previous close gives no change figure", () => {
@@ -84,9 +113,9 @@ test("portfolio: excluded assets are named", () => {
   assert.equal(rate.tooltip, "VOO has no exchange rate, not included");
 });
 
-test("portfolio with nothing valued: dash once loaded, ellipsis before", () => {
+test("portfolio with nothing valued: dash once every provider has been tried, ellipsis before", () => {
   const empty = view({ total: 0, dayChangePct: null, positions: [{ asset: "VOO", value: null, state: "missing" }] });
   assert.equal(barFrame("portfolio", data({ portfolio: empty })).value, "—");
-  assert.equal(barFrame("portfolio", data({ portfolio: empty, loaded: false })).value, "…");
-  assert.equal(barFrame("portfolio", data({ portfolio: view({ positions: [] }), loaded: false })).value, "—");
+  assert.equal(barFrame("portfolio", data({ portfolio: empty, providerHealth: { yahoo: fresh, coingecko: healthy } })).value, "…");
+  assert.equal(barFrame("portfolio", data({ portfolio: view({ positions: [] }), providerHealth: { yahoo: fresh, coingecko: fresh } })).value, "—");
 });

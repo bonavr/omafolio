@@ -47,8 +47,7 @@ BarWidget {
     quotes: market.quotes,
     states: market.states,
     portfolio: market.portfolio,
-    providerHealth: market.providerHealth,
-    loaded: market.lastUpdated !== null
+    providerHealth: market.providerHealth
   }) : null
 
   // A wheel step holds the rotation still for this long, so the item the user
@@ -224,6 +223,10 @@ BarWidget {
 
   readonly property bool dimmed: frame !== null && frame.state === "closed"
 
+  ThemeColors {
+    id: themeColors
+  }
+
   function pillText() {
     if (!frame) return "…"
     var parts = [frame.label, frame.value]
@@ -231,6 +234,22 @@ BarWidget {
     if (frame.state === "closed") parts.push("󰒲")
     if (frame.warn) parts.push("⚠")
     return parts.join(" ")
+  }
+
+  function escapeStyled(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  }
+
+  // The same text as pillText, with the day move in the theme's green or red
+  // (closed frames stay entirely muted, flat moves keep the normal colour).
+  function pillStyledText() {
+    if (!frame) return "…"
+    var plain = pillText()
+    if (frame.change === "" || dimmed || frame.direction === "flat") return escapeStyled(plain)
+    var color = frame.direction === "up" ? themeColors.up : themeColors.down
+    var at = plain.indexOf(frame.change)
+    return escapeStyled(plain.substring(0, at)) + "<font color=\"" + color + "\">" + escapeStyled(frame.change)
+      + "</font>" + escapeStyled(plain.substring(at + frame.change.length))
   }
 
   WidgetButton {
@@ -241,10 +260,21 @@ BarWidget {
     bar: root.bar
     text: root.pillText()
     foreground: root.dimmed ? Color.muted : (root.bar ? root.bar.barForeground : Color.foreground)
-    labelVisible: true
+    // Sizes the pill; the coloured copy below is what is drawn.
+    labelVisible: false
     hasVisualContent: true
     horizontalMargin: 8.75
     tooltipText: root.tooltip
+
+    Text {
+      anchors.centerIn: parent
+      textFormat: Text.StyledText
+      text: root.pillStyledText()
+      color: button.foreground
+      font.family: button.fontFamily
+      font.pixelSize: button.fontSize
+      renderType: Text.NativeRendering
+    }
 
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh()
