@@ -15,6 +15,8 @@ import {
   formatWhen,
   formatQuantity,
   formatDayRange,
+  formatWeekdayAt,
+  pctDirection,
 } from "../lib/format.mjs";
 
 test("prefix is plain when currency is the base, explicit otherwise", () => {
@@ -193,4 +195,30 @@ test("day range: two prices without prefix, dash when either is unusable", () =>
   assert.equal(formatDayRange(0, 1, "USD"), "0.00–1.00");
   assert.equal(formatDayRange(-1, 1, "USD"), "—");
   assert.equal(formatDayRange(1, Infinity, "USD"), "—");
+});
+
+test("exchange weekday: the UTC day of asOf shifted by the exchange's offset", () => {
+  // Friday 16:00 in New York (EDT, UTC-4) is Saturday morning in Sydney.
+  const fridayClose = Date.UTC(2026, 9, 9, 20, 0);
+  assert.equal(formatWeekdayAt(fridayClose, -14400), "Fri");
+  // 21:00 New York is already Saturday in UTC; the exchange's day is still Friday.
+  assert.equal(formatWeekdayAt(Date.UTC(2026, 9, 10, 1, 0), -14400), "Fri");
+  assert.equal(formatWeekdayAt(Date.UTC(2026, 9, 10, 4, 0), -14400), "Sat");
+  // East of UTC: 07:00 Saturday in Sydney (UTC+11) is still Friday in UTC.
+  assert.equal(formatWeekdayAt(Date.UTC(2026, 9, 9, 20, 0), 39600), "Sat");
+});
+
+test("exchange weekday falls back to local time without a usable offset", () => {
+  const t = Date.UTC(2026, 9, 9, 20, 0);
+  assert.equal(formatWeekdayAt(t, undefined), formatWeekday(t));
+  assert.equal(formatWeekdayAt(t, NaN), formatWeekday(t));
+});
+
+test("percentage direction reads as displayed: 0.05 rounds up to 0.1, 0.04 to 0.0", () => {
+  assert.equal(pctDirection(0.04), "flat");
+  assert.equal(pctDirection(-0.04), "flat");
+  assert.equal(pctDirection(0.05), "up");
+  assert.equal(pctDirection(-0.05), "down");
+  assert.equal(pctDirection(0), "flat");
+  assert.equal(pctDirection(null), "flat");
 });

@@ -90,3 +90,11 @@ test("a day range survives the round trip; a malformed one makes the entry inval
     assert.deepEqual(parseQuoteCache(cacheWith({ VOO: { ...voo(), dayRange } })), {}, JSON.stringify(dayRange));
   }
 });
+
+test("a session's UTC offset is optional but must be a number", () => {
+  const withOffset = { ...voo(), session: { ...voo().session, utcOffsetSeconds: -14400 } };
+  assert.deepEqual(parseQuoteCache(serializeQuoteCache({ VOO: withOffset })).VOO.session, withOffset.session);
+  for (const utcOffsetSeconds of ["-14400", null]) {
+    assert.deepEqual(parseQuoteCache(cacheWith({ VOO: { ...voo(), session: { ...voo().session, utcOffsetSeconds } } })), {}, String(utcOffsetSeconds));
+  }
+});

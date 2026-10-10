@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   portfolioRows, watchRows, portfolioHero, assetHero, statusLines, historyAssets,
-  portfolioSeries, seriesDirection, rangeLine, chartPoints,
+  portfolioSeries, seriesDirection, rangeLine, chartPoints, chartNote,
 } from "../lib/panel.mjs";
 import { valuePortfolio } from "../lib/portfolio.mjs";
 
@@ -272,4 +272,38 @@ test("chart points: level series is a middle line; fewer than two points or no b
   assert.deepEqual(chartPoints([], 10, 20, 2), []);
   assert.deepEqual(chartPoints([[0, 5], [1, 6]], 0, 20, 2), []);
   assert.deepEqual(chartPoints([[0, 5], [1, 6]], 10, 0, 2), []);
+});
+
+test("status: last close is the exchange's weekday when the quote carries its offset", () => {
+  // Friday 16:00 New York = Saturday 07:00 in Sydney; the line must say Friday anywhere.
+  const fridayClose = Date.UTC(2026, 9, 9, 20, 0);
+  const ny = { start: 0, end: 1, timezone: "America/New_York", utcOffsetSeconds: -14400 };
+  const withOffset = Object.assign({}, quotes, {
+    VOO: Object.assign({}, quotes.VOO, { asOf: fridayClose, session: ny }),
+    VTSAX: Object.assign({}, quotes.VTSAX, { asOf: fridayClose - 60000, session: Object.assign({}, ny, { utcOffsetSeconds: 39600 }) }),
+  });
+  // The latest quote (VOO) decides, with its own offset.
+  assert.deepEqual(statusLines(["VOO", "VTSAX"], make({ quotes: withOffset })), ["󰒲 US market closed · last close Fri"]);
+});
+
+test("series direction follows the displayed percentage: 0.04% is flat, 0.06% is not", () => {
+  assert.equal(seriesDirection(series("X", [100, 100.04])), "flat");
+  assert.equal(seriesDirection(series("X", [100, 100.06])), "up");
+  assert.equal(seriesDirection(series("X", [100, 99.94])), "down");
+  assert.equal(seriesDirection(series("X", [0, 1])), "flat");
+});
+
+test("chart note names the failing provider whose history is missing", () => {
+  const voo = { VOO: series("VOO", [1, 2]), VTSAX: series("VTSAX", [1, 2]) };
+  const cgDown = { yahoo: healthy, coingecko: failing };
+  assert.equal(chartNote(make(), {}, ""), "No history yet");
+  assert.equal(chartNote(make({ providerHealth: cgDown }), voo, ""), "History unavailable (CoinGecko)");
+  // The failing provider's assets all have history: nothing to blame.
+  assert.equal(chartNote(make({ providerHealth: cgDown }), { "crypto:bitcoin": series("b", [1, 2]) }, ""), "No history yet");
+  assert.equal(chartNote(make({ providerHealth: { yahoo: failing, coingecko: failing } }), {}, ""), "History unavailable (Yahoo, CoinGecko)");
+  // A one-point series is no history either.
+  assert.equal(chartNote(make({ providerHealth: cgDown }), Object.assign({ "crypto:bitcoin": series("b", [1]) }, voo), ""), "History unavailable (CoinGecko)");
+  // The position view only needs its own asset.
+  assert.equal(chartNote(make({ providerHealth: cgDown }), {}, "VOO"), "No history yet");
+  assert.equal(chartNote(make({ providerHealth: cgDown }), {}, "crypto:bitcoin"), "History unavailable (CoinGecko)");
 });

@@ -229,3 +229,14 @@ test("day range needs both ends with low <= high, and is scaled for minor units"
   assert.equal("dayRange" in parse({ ...baseMeta, regularMarketDayLow: "4", regularMarketDayHigh: 5 }), false);
   assert.deepEqual(parse({ ...baseMeta, currency: "GBp", regularMarketDayLow: 150, regularMarketDayHigh: 250 }).dayRange, { low: 1.5, high: 2.5 });
 });
+
+test("session records the exchange's UTC offset when Yahoo gives one", () => {
+  const q = byAsset(yahoo.parse(quotesReq, 200, fixture("spark-quotes.json")));
+  assert.equal(q.VOO.session.utcOffsetSeconds, -14400);
+  assert.equal(q["USDAUD=X"].session.utcOffsetSeconds, 3600);
+  const period = { currentTradingPeriod: { regular: { start: 1, end: 2 } }, exchangeTimezoneName: "America/New_York" };
+  const without = yahoo.parse(quotesReq, 200, spark({ ...baseMeta, ...period }))[0];
+  assert.equal("utcOffsetSeconds" in without.session, false);
+  const bad = yahoo.parse(quotesReq, 200, spark({ ...baseMeta, ...period, gmtoffset: "-14400" }))[0];
+  assert.equal("utcOffsetSeconds" in bad.session, false);
+});

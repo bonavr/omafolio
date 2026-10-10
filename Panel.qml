@@ -450,7 +450,7 @@ Panel {
               Caption {
                 anchors.centerIn: parent
                 visible: !root.chartSeries || root.chartSeries.points.length < 2
-                text: "No history yet"
+                text: root.panelData ? PanelLib.chartNote(root.panelData, root.seriesByAsset, root.shownAsset) : ""
               }
             }
           }
