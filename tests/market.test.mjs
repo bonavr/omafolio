@@ -32,13 +32,21 @@ test("assetsToFetch orders holdings, watch, bar and de-duplicates", () => {
   );
 });
 
-test("no FX pair for base-currency assets or crypto", () => {
+test("no FX pair for base-currency assets", () => {
   const quotes = { VOO: q("VOO", "USD"), "crypto:bitcoin": q("crypto:bitcoin", "USD", "crypto") };
   assert.deepEqual(fxPairs(quotes, [], "USD"), []);
   assert.deepEqual(fxPairs(quotes, [], "AUD"), ["USDAUD=X"]);
 });
-test("crypto and fx quotes in foreign currencies add no pair", () => {
-  const quotes = { "crypto:bitcoin": q("crypto:bitcoin", "EUR", "crypto"), "USDEUR=X": q("USDEUR=X", "EUR", "fx") };
+test("crypto is converted like any other asset: its quote currency needs a pair", () => {
+  const btc = { "crypto:bitcoin": q("crypto:bitcoin", "USD", "crypto") };
+  assert.deepEqual(fxPairs(btc, [], "USD"), []);
+  assert.deepEqual(fxPairs(btc, [], "AUD"), ["USDAUD=X"]);
+  // A crypto quote cached from before crypto was priced in USD is still converted by its own currency.
+  assert.deepEqual(fxPairs({ "crypto:bitcoin": q("crypto:bitcoin", "AUD", "crypto") }, [], "AUD"), []);
+  assert.deepEqual(fxPairs({ "crypto:bitcoin": q("crypto:bitcoin", "AUD", "crypto") }, [], "USD"), ["AUDUSD=X"]);
+});
+test("fx quotes in foreign currencies add no pair", () => {
+  const quotes = { "USDEUR=X": q("USDEUR=X", "EUR", "fx") };
   assert.deepEqual(fxPairs(quotes, [], "AUD"), []);
 });
 test("cost currencies need FX too", () => {

@@ -11,8 +11,9 @@ import "lib/format.mjs" as Format
 // The panel's settings page, opened from the gear. Every change saves at once:
 // settings to the widget's shell.json entry, holdings to portfolio.json through
 // MarketService. Sections:
-// - General: base currency, refresh interval (60 s minimum; a lower typed value
-//   snaps back on blur with a note saying why) and the range the panel opens on.
+// - General: base currency, whether asset prices show in their own currency
+//   (nativePrices), refresh interval (60 s minimum; a lower typed value snaps
+//   back on blur with a note saying why) and the range the panel opens on.
 // - Bar rotation: rotation interval and the rotation list (drag to reorder, ✕).
 // - Holdings: quantity and average cost edited in place, the cost currency
 //   changed with ▾, 󰐕 toggling bar membership, ✕ removing; a search adds one.
@@ -63,7 +64,9 @@ FocusScope {
   }
 
   // The asset's listing currency once its quote has said it; null before
-  // then, and for crypto, which has none.
+  // then, and for crypto, which is not listed anywhere (its quotes are in US
+  // dollars only because CoinGecko is asked in them), so its cost currency is
+  // always stored.
   function listingOf(asset) {
     var quote = quotes[asset]
     return quote && asset.indexOf("crypto:") !== 0 ? quote.currency : null
@@ -693,6 +696,63 @@ FocusScope {
       }
     }
 
+    // Clicking anywhere on the row flips the switch; Space or Enter does too
+    // once Tab has reached it.
+    Item {
+      id: nativeRow
+      width: column.width
+      implicitHeight: Math.max(page.rowHeight, nativeLabel.implicitHeight) + Style.space(6)
+      activeFocusOnTab: true
+
+      function flip() { page.persist({ nativePrices: !page.config.nativePrices }) }
+
+      Keys.onSpacePressed: flip()
+      Keys.onReturnPressed: flip()
+      Keys.onEnterPressed: flip()
+
+      Text {
+        id: nativeLabel
+        anchors.left: parent.left
+        anchors.right: nativeSwitch.left
+        anchors.rightMargin: page.gap
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Show prices in each asset's own currency"
+        color: page.fg
+        font.family: page.fontFamily
+        font.pixelSize: Style.font.body
+        wrapMode: Text.Wrap
+      }
+
+      ToggleSwitch {
+        id: nativeSwitch
+        anchors.right: parent.right
+        // The cursor ring's padding sits outside the track's edge, so the
+        // track lines up with the controls above and below.
+        anchors.rightMargin: -cursorPad
+        anchors.verticalCenter: parent.verticalCenter
+        checked: page.config.nativePrices
+        interactive: false
+        hasCursor: nativeRow.activeFocus || nativeMouse.containsMouse
+        cursorRing: true
+        foreground: page.fg
+      }
+
+      MouseArea {
+        id: nativeMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: nativeRow.flip()
+      }
+    }
+
+    Caption {
+      width: column.width
+      bottomPadding: Style.space(4)
+      text: "Totals, values and gains stay in " + page.base + "."
+    }
+
     SettingRow {
       label: "Refresh every"
 
@@ -935,7 +995,7 @@ FocusScope {
         required property int index
         readonly property var holding: page.holdings[index]
         readonly property var quote: holding ? page.quotes[holding.asset] : undefined
-        // Listing currency, once a quote has said it; crypto has none.
+        // Listing currency, once a quote has said it; crypto has none (see listingOf).
         readonly property string listing: holding && quote && holding.asset.indexOf("crypto:") !== 0 ? quote.currency : ""
         readonly property string costCurrency: holding ? (holding.costCurrency || listing) : ""
 

@@ -68,6 +68,19 @@ test("gain with costCurrency in base includes currency movement", () => {
   assert.ok(near(pos(v, "crypto:bitcoin").gain, 0.05 * BTC_AUD - 0.05 * 61000));
   assert.ok(near(pos(v, "crypto:bitcoin").gainPct, ((BTC_AUD - 61000) / 61000) * 100));
 });
+test("crypto priced in US dollars is valued through USDAUD=X; a cached AUD crypto quote still values at 1", () => {
+  const h = [{ asset: "crypto:bitcoin", quantity: 0.05, cost: 61000, costCurrency: "AUD" }];
+  const usd = { ...quotes, "crypto:bitcoin": q("crypto:bitcoin", 70000, 69000, "USD", "crypto") };
+  const v = valuePortfolio(h, usd, allLive, "AUD");
+  assert.ok(near(pos(v, "crypto:bitcoin").value, 0.05 * 70000 * 1.431));
+  assert.ok(near(pos(v, "crypto:bitcoin").gain, 0.05 * 70000 * 1.431 - 0.05 * 61000));
+  assert.ok(near(pos(v, "crypto:bitcoin").dayChange, 0.05 * 1000 * 1.431));
+  // Without the rate the coin cannot be valued, like any US-listed asset.
+  assert.deepEqual(valuePortfolio(h, without(usd, "USDAUD=X"), allLive, "AUD").excluded, ["crypto:bitcoin"]);
+  // The old AUD quote from the cache needs no rate in an AUD portfolio.
+  const cached = valuePortfolio(h, without(quotes, "USDAUD=X"), allLive, "AUD");
+  assert.ok(near(pos(cached, "crypto:bitcoin").value, 0.05 * BTC_AUD));
+});
 test("cost currency differing from listing currency is converted at its own rate", () => {
   // VOO lists in USD but was bought for 600 AUD per unit.
   const h = [{ asset: "VOO", quantity: 2, cost: 600, costCurrency: "AUD" }];

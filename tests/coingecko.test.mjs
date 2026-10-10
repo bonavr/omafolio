@@ -5,39 +5,39 @@ import coingecko from "../lib/providers/coingecko.mjs";
 import { ProviderError } from "../lib/types.mjs";
 
 const fixture = (n) => readFileSync(new URL(`./fixtures/coingecko/${n}`, import.meta.url), "utf8");
-const marketsReq = coingecko.quoteRequests(["crypto:bitcoin", "crypto:ethereum", "crypto:notarealcoinx"], "AUD")[0];
-const chartReq = coingecko.historyRequests(["crypto:bitcoin"], "1W", "AUD")[0];
+const marketsReq = coingecko.quoteRequests(["crypto:bitcoin", "crypto:ethereum", "crypto:notarealcoinx"])[0];
+const chartReq = coingecko.historyRequests(["crypto:bitcoin"], "1W")[0];
 const searchReq = coingecko.searchRequest("sol");
 const fixtureBtc = JSON.parse(fixture("markets.json")).find((c) => c.id === "bitcoin");
 
 /** Builds a markets body with one coin overridden on top of a valid base. */
 const market = (over = {}) =>
   JSON.stringify([{ id: "x", symbol: "x", name: "X", current_price: 10, price_change_24h: 1, last_updated: "2026-10-10T02:26:54.000Z", ...over }]);
-const xReq = coingecko.quoteRequests(["crypto:x"], "AUD")[0];
+const xReq = coingecko.quoteRequests(["crypto:x"])[0];
 
-test("quote request: one request, ids and lower-case currency in the url", () => {
+test("quote request: one request, ids and US dollars in the url", () => {
   assert.equal(marketsReq.provider, "coingecko");
   assert.equal(marketsReq.type, "quotes");
-  assert.equal(marketsReq.url, "https://api.coingecko.com/api/v3/coins/markets?vs_currency=aud&ids=bitcoin,ethereum,notarealcoinx");
+  assert.equal(marketsReq.url, "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,notarealcoinx");
   assert.deepEqual(marketsReq.assets, ["crypto:bitcoin", "crypto:ethereum", "crypto:notarealcoinx"]);
 });
 
 test("quote request: empty list and bare prefix give no request, one valid id gives one", () => {
-  assert.deepEqual(coingecko.quoteRequests([], "AUD"), []);
-  assert.deepEqual(coingecko.quoteRequests(["crypto:"], "AUD"), []);
-  assert.equal(coingecko.quoteRequests(["crypto:", "crypto:a"], "AUD").length, 1);
-  assert.deepEqual(coingecko.quoteRequests(["crypto:", "crypto:a"], "AUD")[0].assets, ["crypto:a"]);
+  assert.deepEqual(coingecko.quoteRequests([]), []);
+  assert.deepEqual(coingecko.quoteRequests(["crypto:"]), []);
+  assert.equal(coingecko.quoteRequests(["crypto:", "crypto:a"]).length, 1);
+  assert.deepEqual(coingecko.quoteRequests(["crypto:", "crypto:a"])[0].assets, ["crypto:a"]);
 });
 
 test("ids are URL-encoded", () => {
-  assert.match(coingecko.quoteRequests(["crypto:a b"], "AUD")[0].url, /ids=a%20b$/);
-  assert.match(coingecko.historyRequests(["crypto:a/b"], "1D", "AUD")[0].url, /coins\/a%2Fb\/market_chart/);
+  assert.match(coingecko.quoteRequests(["crypto:a b"])[0].url, /ids=a%20b$/);
+  assert.match(coingecko.historyRequests(["crypto:a/b"], "1D")[0].url, /coins\/a%2Fb\/market_chart/);
   assert.match(coingecko.searchRequest("a&b c").url, /query=a%26b%20c$/);
 });
 
-test("crypto quotes are priced in the base currency", () => {
+test("crypto quotes are priced in US dollars", () => {
   const [q] = coingecko.parse(marketsReq, 200, fixture("markets.json")).filter((q) => q.asset === "crypto:bitcoin");
-  assert.equal(q.currency, "AUD");
+  assert.equal(q.currency, "USD");
   assert.equal(q.kind, "crypto");
   assert.equal(q.symbol, "BTC");
   assert.equal(q.name, "Bitcoin");
@@ -48,10 +48,14 @@ test("crypto quotes are priced in the base currency", () => {
   assert.ok(Math.abs(q.previousClose - (q.price - fixtureBtc.price_change_24h)) < 1e-6);
 });
 
-test("currency follows the requested base currency", () => {
-  const usd = coingecko.quoteRequests(["crypto:x"], "USD")[0];
-  assert.match(usd.url, /vs_currency=usd/);
-  assert.equal(coingecko.parse(usd, 200, market())[0].currency, "USD");
+test("quotes and history are requested and labelled in US dollars, whatever else is passed", () => {
+  // A caller still passing a base currency must not change the currency asked for.
+  const quotes = coingecko.quoteRequests(["crypto:x"], "AUD")[0];
+  assert.match(quotes.url, /vs_currency=usd&/);
+  assert.equal(coingecko.parse(quotes, 200, market())[0].currency, "USD");
+  const history = coingecko.historyRequests(["crypto:x"], "1D", "AUD")[0];
+  assert.match(history.url, /vs_currency=usd&/);
+  assert.equal(coingecko.parse(history, 200, JSON.stringify({ prices: [[1, 2]] }))[0].currency, "USD");
 });
 
 test("unknown ids are simply absent from the result", () => {
@@ -85,25 +89,25 @@ test("bad bodies throw ProviderError", () => {
 });
 
 test("history: one request per coin with days per range", () => {
-  const days = (r) => coingecko.historyRequests(["crypto:bitcoin"], r, "AUD")[0].url;
+  const days = (r) => coingecko.historyRequests(["crypto:bitcoin"], r)[0].url;
   assert.match(days("1D"), /days=1$/);
   assert.match(days("1W"), /days=7$/);
   assert.match(days("1M"), /days=30$/);
   assert.match(days("1Y"), /days=365$/);
-  const reqs = coingecko.historyRequests(["crypto:bitcoin", "crypto:ethereum"], "1W", "AUD");
+  const reqs = coingecko.historyRequests(["crypto:bitcoin", "crypto:ethereum"], "1W");
   assert.equal(reqs.length, 2);
-  assert.equal(reqs[1].url, "https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=aud&days=7");
+  assert.equal(reqs[1].url, "https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=7");
   assert.equal(reqs[1].range, "1W");
   assert.deepEqual(reqs[1].assets, ["crypto:ethereum"]);
-  assert.deepEqual(coingecko.historyRequests([], "1W", "AUD"), []);
-  assert.deepEqual(coingecko.historyRequests(["crypto:"], "1W", "AUD"), []);
+  assert.deepEqual(coingecko.historyRequests([], "1W"), []);
+  assert.deepEqual(coingecko.historyRequests(["crypto:"], "1W"), []);
 });
 
 test("history parses ms timestamps into a series", () => {
   const raw = JSON.parse(fixture("chart-7.json")).prices;
   const [s] = coingecko.parse(chartReq, 200, fixture("chart-7.json"));
   assert.equal(s.asset, "crypto:bitcoin");
-  assert.equal(s.currency, "AUD");
+  assert.equal(s.currency, "USD");
   assert.equal(s.points.length, raw.length);
   assert.deepEqual(s.points[0], raw[0]);
 });

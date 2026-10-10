@@ -6,7 +6,6 @@
 
 import { quoteRequests, historyRequests, searchRequests, parse } from "../lib/providers/index.mjs";
 
-const BASE = "USD";
 const COINGECKO_SPACING_MS = 2500;
 const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -48,15 +47,15 @@ const only = (/** @type {import("../lib/types.mjs").Request[]} */ reqs, /** @typ
 };
 
 checks.push({ name: "Yahoo quotes (stock, ETF, fund, FX)", provider: "yahoo",
-  request: only(quoteRequests(yahooAssets, BASE), "yahoo"), expect: covers(yahooAssets) });
+  request: only(quoteRequests(yahooAssets), "yahoo"), expect: covers(yahooAssets) });
 checks.push({ name: "Yahoo history 1M (stock, ETF, fund, FX)", provider: "yahoo",
-  request: only(historyRequests(yahooAssets, "1M", BASE, kindOf), "yahoo"), expect: covers(yahooAssets) });
+  request: only(historyRequests(yahooAssets, "1M", kindOf), "yahoo"), expect: covers(yahooAssets) });
 checks.push({ name: "Yahoo search", provider: "yahoo",
   request: only(searchRequests("vanguard total"), "yahoo"), expect: nonEmpty });
 checks.push({ name: "CoinGecko quotes", provider: "coingecko",
-  request: only(quoteRequests([btc], BASE), "coingecko"), expect: covers([btc]) });
+  request: only(quoteRequests([btc]), "coingecko"), expect: covers([btc]) });
 checks.push({ name: "CoinGecko history 1M", provider: "coingecko",
-  request: only(historyRequests([btc], "1M", BASE, kindOf), "coingecko"), expect: covers([btc]) });
+  request: only(historyRequests([btc], "1M", kindOf), "coingecko"), expect: covers([btc]) });
 checks.push({ name: "CoinGecko search", provider: "coingecko",
   request: only(searchRequests("sol"), "coingecko"), expect: nonEmpty });
 

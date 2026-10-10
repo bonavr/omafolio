@@ -23,9 +23,9 @@ record_coingecko() {
   local out="$root/coingecko"
   mkdir -p "$out"
   local base="https://api.coingecko.com/api/v3"
-  get "$base/coins/markets?vs_currency=aud&ids=bitcoin,ethereum,notarealcoinx" > "$out/markets.json"
+  get "$base/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,notarealcoinx" > "$out/markets.json"
   sleep 3
-  get "$base/coins/bitcoin/market_chart?vs_currency=aud&days=7" > "$out/chart-7.json"
+  get "$base/coins/bitcoin/market_chart?vs_currency=usd&days=7" > "$out/chart-7.json"
   sleep 3
   get "$base/search?query=sol" > "$out/search.json"
 }

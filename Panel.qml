@@ -155,6 +155,7 @@ Panel {
     watch: market.config.watch,
     providerHealth: market.providerHealth,
     baseCurrency: market.config.baseCurrency,
+    nativePrices: market.config.nativePrices,
     now: market.clock
   }) : null
 

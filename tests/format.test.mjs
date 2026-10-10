@@ -5,6 +5,7 @@ import {
   formatMoney,
   formatPrice,
   formatBarValue,
+  formatBarPrice,
   formatChange,
   formatSigned,
   assetLabel,
@@ -221,4 +222,26 @@ test("percentage direction reads as displayed: 0.05 rounds up to 0.1, 0.04 to 0.
   assert.equal(pctDirection(-0.05), "down");
   assert.equal(pctDirection(0), "flat");
   assert.equal(pctDirection(null), "flat");
+});
+
+test("bar price: plain in the base currency, prefixed otherwise", () => {
+  assert.equal(formatBarPrice(82699, "USD", "USD"), "82,699");
+  assert.equal(formatBarPrice(82699, "USD", "AUD"), "US$82,699");
+  assert.equal(formatBarPrice(715.59, "USD", "AUD"), "US$715.59");
+  assert.equal(formatBarPrice(118413, "AUD", "AUD"), "118,413");
+  assert.equal(formatBarPrice(118413, "AUD", "USD"), "A$118,413");
+  assert.equal(formatBarPrice(200, "EUR", "AUD"), "€200.00");
+  assert.equal(formatBarPrice(5, "XYZ", "AUD"), "XYZ 5.00");
+});
+
+test("bar price: the 7-character rule applies to the number only", () => {
+  // "US$999,999" is 10 characters but the number is 7: still in full.
+  assert.equal(formatBarPrice(999999, "USD", "AUD"), "US$999,999");
+  assert.equal(formatBarPrice(1000000, "USD", "AUD"), "US$1M");
+  assert.equal(formatBarPrice(1234567, "USD", "AUD"), "US$1.235M");
+});
+
+test("bar price: no number is a bare dash, with no prefix", () => {
+  assert.equal(formatBarPrice(NaN, "USD", "AUD"), "—");
+  assert.equal(formatBarPrice(Infinity, "USD", "AUD"), "—");
 });

@@ -129,20 +129,19 @@ QtObject {
   function history(assets, range) {
     var cache = historyCache
     var now = clock
-    var base = config.baseCurrency
     var maxAge = config.refreshSeconds * 1000
     var out = {}
     var due = []
     for (const asset of assets) {
-      var key = historyKey(base, range, asset)
+      var key = historyKey(range, asset)
       var entry = cache[key]
       if (entry && entry.series) out[asset] = entry.series
       if (panelOpen && !historyPending[key] && (!entry || now - entry.at >= maxAge) && !historyResting(Providers.providerFor(asset).id, now)) due.push(asset)
     }
     if (due.length > 0) {
-      for (const request of Providers.historyRequests(due, range, base, kindOf)) {
-        for (const asset of request.assets) historyPending[historyKey(base, range, asset)] = true
-        historyQueue.push({ request: request, base: base })
+      for (const request of Providers.historyRequests(due, range, kindOf)) {
+        for (const asset of request.assets) historyPending[historyKey(range, asset)] = true
+        historyQueue.push(request)
       }
       historyPump.restart()
     }
@@ -210,9 +209,10 @@ QtObject {
   // Quote cache text as last read or written, to skip unchanged writes.
   property string cacheText: ""
 
-  // History: "base|range|asset" -> {at: epoch ms, series: Series|null}; keys
+  // History: "range|asset" -> {at: epoch ms, series: Series|null}; keys
   // requested and not yet answered; requests waiting their turn; and the one
-  // in flight ({request, base}).
+  // in flight. A series is in its asset's own currency (exchange rates are
+  // assets too), so the base currency is not part of the key.
   property var historyCache: ({})
   property var historyPending: ({})
   property var historyQueue: []
@@ -326,8 +326,8 @@ QtObject {
     cacheWriter.write(text)
   }
 
-  function historyKey(base, range, asset) {
-    return base + "|" + range + "|" + asset
+  function historyKey(range, asset) {
+    return range + "|" + asset
   }
 
   // Whether `provider` (an id) is resting after a failed quote or history
@@ -342,12 +342,11 @@ QtObject {
   // attempt time is recorded either way, and a failure also rests the
   // provider's history (historyHealth), so it is not retried at once.
   function storeHistory(series) {
-    var current = historyCurrent
-    var request = current.request
+    var request = historyCurrent
     var now = Date.now()
     var next = Object.assign({}, historyCache)
     for (const asset of request.assets) {
-      var key = historyKey(current.base, request.range, asset)
+      var key = historyKey(request.range, asset)
       next[key] = { at: now, series: Market.keptSeries(next[key] ? next[key].series : null, series, asset) }
       delete historyPending[key]
     }
@@ -375,8 +374,8 @@ QtObject {
   onPanelOpenChanged: {
     if (panelOpen) return
     // Closing the panel cancels history requests still waiting their turn.
-    for (const item of historyQueue) {
-      for (const asset of item.request.assets) delete historyPending[historyKey(item.base, item.request.range, asset)]
+    for (const request of historyQueue) {
+      for (const asset of request.assets) delete historyPending[historyKey(request.range, asset)]
     }
     historyQueue = []
   }
@@ -394,24 +393,23 @@ QtObject {
     // Assets this provider should be asked for now (none until the holdings
     // file has been read and a widget has supplied settings).
     readonly property var assets: service.ready && service.settings !== null ? service.assetsFor(provider) : []
-    readonly property string wantKey: service.config.baseCurrency + "|" + assets.join(",")
-    // What the latest round asked for (crypto prices depend on the base currency).
+    // Every quote is in its asset's own currency, so only the assets matter; a
+    // new base currency shows up here as new exchange-rate pairs.
+    readonly property string wantKey: assets.join(",")
+    // What the latest round asked for.
     property var requested: []
-    property string requestedBase: ""
     property var lastAttemptAt: null
     // Whether any request of the round in flight has failed.
     property bool roundFailed: false
 
-    // New assets, or a new base currency, are fetched at once; the rest wait
-    // for the timer.
+    // New assets are fetched at once; the rest wait for the timer.
     onWantKeyChanged: {
       if (assets.length === 0) {
         timer.stop()
         requested = []
         return
       }
-      var base = service.config.baseCurrency
-      if (base !== requestedBase || assets.some(function(a) { return requested.indexOf(a) < 0 })) kick.restart()
+      if (assets.some(function(a) { return requested.indexOf(a) < 0 })) kick.restart()
     }
 
     // Starts a round now (queued behind one in flight). With nothing to fetch
@@ -419,11 +417,9 @@ QtObject {
     function start() {
       timer.stop()
       if (assets.length === 0) return
-      var base = service.config.baseCurrency
       requested = assets
-      requestedBase = base
       lastAttemptAt = Date.now()
-      fetcher.fetch(Providers.quoteRequests(assets, base))
+      fetcher.fetch(Providers.quoteRequests(assets))
     }
 
     function fail(reason) {
@@ -504,13 +500,13 @@ QtObject {
       if (root.historyFetcher.busy) return
       var now = Date.now()
       while (root.historyQueue.length > 0) {
-        var item = root.historyQueue.shift()
-        if (!root.historyResting(item.request.provider, now)) {
-          root.historyCurrent = item
-          root.historyFetcher.fetch([item.request])
+        var request = root.historyQueue.shift()
+        if (!root.historyResting(request.provider, now)) {
+          root.historyCurrent = request
+          root.historyFetcher.fetch([request])
           return
         }
-        for (const asset of item.request.assets) delete root.historyPending[root.historyKey(item.base, item.request.range, asset)]
+        for (const asset of request.assets) delete root.historyPending[root.historyKey(request.range, asset)]
       }
     }
   }

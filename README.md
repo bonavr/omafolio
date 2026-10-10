@@ -35,7 +35,8 @@ once. You can also edit the file by hand.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `baseCurrency` | `USD` | Currency everything is shown in. One of USD, AUD, EUR, GBP, CAD, NZD, JPY, CHF, SGD, HKD, SEK, NOK, DKK, INR. |
+| `baseCurrency` | `USD` | Currency your totals, values and gains are shown in. One of USD, AUD, EUR, GBP, CAD, NZD, JPY, CHF, SGD, HKD, SEK, NOK, DKK, INR. |
+| `nativePrices` | `true` | Show each asset's price (in the bar and the watchlist) in the asset's own currency. `false` converts those prices to `baseCurrency`. |
 | `refreshSeconds` | `60` | Price refresh interval. The minimum is 60; a lower value is used as 60. |
 | `rotateSeconds` | `5` | Seconds each item stays in the bar. The minimum is 2. |
 | `range` | `1M` | Chart range the panel opens on: `1D`, `1W`, `1M` or `1Y`. |
@@ -44,10 +45,11 @@ once. You can also edit the file by hand.
 
 Values the widget cannot use are corrected, not rejected. A `refreshSeconds`
 below 60 is used as 60 and a `rotateSeconds` below 2 as 2. A non-number, an
-unknown currency or an unknown range falls back to the default. Invalid `bar`
-and `watch` entries (anything but a non-blank string) are dropped, a `bar` or
-`watch` that is not a list is ignored, and an empty `bar` shows Bitcoin. The
-settings page notes each of these corrections except the empty-bar fallback.
+unknown currency, an unknown range or a `nativePrices` that is not `true` or
+`false` falls back to the default. Invalid `bar` and `watch` entries (anything
+but a non-blank string) are dropped, a `bar` or `watch` that is not a list is
+ignored, and an empty `bar` shows Bitcoin. The settings page notes each of
+these corrections except the empty-bar fallback.
 
 While every Yahoo market in play is closed, Yahoo prices are fetched every 15
 minutes instead of every `refreshSeconds`. If a provider fails, requests to it
@@ -56,6 +58,28 @@ back off from 60 seconds up to 15 minutes.
 An asset reference is a Yahoo Finance symbol (`VOO`, `AAPL`, `VTSAX`), or
 `crypto:` followed by a CoinGecko id (`crypto:bitcoin`). The search box on the
 settings page finds the right reference for you.
+
+### Currencies
+
+Totals, position values, day moves in money and gains are always in
+`baseCurrency`. A price belongs to its asset: a stock, ETF or fund is priced
+in the currency it trades in (VOO in US dollars), and crypto is priced in US
+dollars. With `nativePrices` on (the default) the bar and the watchlist show
+those prices as they are; turned off, they are converted to `baseCurrency` at
+the current exchange rate, or left as they are while no rate is known yet. The
+day move percentage is the asset's own either way. The position view always
+shows quantity × price in the asset's own currency.
+
+Every amount in a currency other than `baseCurrency` carries its currency, so
+with a base of AUD the bar shows `₿ US$82,699 ▲ 0.4%` and `VOO US$715.59`,
+while with a base of USD the same coin is `₿ 82,699`. A day range in another
+currency names it in its label (`Day range · US$`). Amounts in the base
+currency stay as they were: plain in the bar, `$` (or the currency's own
+symbol) in the panel.
+
+Crypto, like US stocks, is converted to a non-USD base with Yahoo's exchange
+rate (`USDAUD=X` and so on), so with such a base your crypto holdings depend on
+Yahoo for that rate as well as on CoinGecko for the price.
 
 ## Holdings
 
@@ -73,7 +97,9 @@ hand; the panel picks up changes to the file.
 
 - `cost` is the average cost per unit, not the total.
 - `costCurrency` is the currency `cost` is in. Leave it out when it is the
-  currency the asset trades in (for crypto, your base currency).
+  currency the asset trades in. For crypto that is US dollars, so write the
+  currency you paid in; the settings page always does, starting from your
+  base currency.
 
 What `costCurrency` does to the gain:
 
@@ -113,11 +139,11 @@ It holds symbols, prices and times, never quantities. It is safe to delete.
 - Ticker symbols do, and so do your base currency and what you type into the
   settings page's search box. Prices come from Yahoo Finance and CoinGecko,
   requested from your IP address with a generic user agent and no cookies
-  (`~/.curlrc` is not read). The base currency goes to CoinGecko as the
-  currency prices are quoted in, and to Yahoo inside exchange-rate symbols
-  such as `USDAUD=X`. Each search is sent to both providers. Either provider
-  can learn which assets you follow and your base currency from those
-  requests, though not how much you hold. If that is more visibility than you
+  (`~/.curlrc` is not read). CoinGecko is always asked for US dollar prices.
+  The base currency goes to Yahoo inside exchange-rate symbols such as
+  `USDAUD=X`. Each search is sent to both providers. Either provider can
+  learn which assets you follow from those requests, and Yahoo your base
+  currency, though not how much you hold. If that is more visibility than you
   accept, run your traffic through a VPN. Hiding the symbols themselves is not
   something this plugin does.
 - `shell.json` holds the symbols in your bar and watchlist, never quantities.

@@ -4,7 +4,7 @@ import { normalizeSettings, CURRENCIES, DEFAULTS } from "../lib/settings.mjs";
 
 test("defaults show bitcoin with no setup", () => {
   const { settings, notes } = normalizeSettings({});
-  assert.deepEqual(settings, { baseCurrency: "USD", refreshSeconds: 60, rotateSeconds: 5, range: "1M", bar: ["crypto:bitcoin"], watch: [] });
+  assert.deepEqual(settings, { baseCurrency: "USD", refreshSeconds: 60, rotateSeconds: 5, range: "1M", bar: ["crypto:bitcoin"], watch: [], nativePrices: true });
   assert.deepEqual(notes, []);
 });
 
@@ -104,4 +104,22 @@ test("constants the settings page shares", async () => {
   assert.equal(s.MIN_ROTATE_SECONDS, 2);
   assert.deepEqual([...s.RANGES], ["1D", "1W", "1M", "1Y"]);
   assert.equal(s.REFRESH_MIN_NOTE, normalizeSettings({ refreshSeconds: 1 }).notes[0]);
+});
+
+test("nativePrices: true and false are kept, absent is true without a note", () => {
+  assert.equal(normalizeSettings({ nativePrices: true }).settings.nativePrices, true);
+  const off = normalizeSettings({ nativePrices: false });
+  assert.equal(off.settings.nativePrices, false);
+  assert.deepEqual(off.notes, []);
+  const absent = normalizeSettings({});
+  assert.equal(absent.settings.nativePrices, true);
+  assert.deepEqual(absent.notes, []);
+});
+
+test("nativePrices that is not a boolean falls back to true with a note", () => {
+  for (const raw of ["false", 0, 1, null, "yes", {}]) {
+    const { settings, notes } = normalizeSettings({ nativePrices: raw });
+    assert.equal(settings.nativePrices, true, JSON.stringify(raw));
+    assert.deepEqual(notes, ["nativePrices must be true or false; using true."], JSON.stringify(raw));
+  }
 });

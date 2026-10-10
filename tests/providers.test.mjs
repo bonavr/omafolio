@@ -12,26 +12,26 @@ test("routing by prefix", () => {
 });
 
 test("one request per provider for a mixed set", () => {
-  const reqs = quoteRequests(["VOO", "crypto:bitcoin", "AAPL"], "AUD");
+  const reqs = quoteRequests(["VOO", "crypto:bitcoin", "AAPL"]);
   assert.equal(reqs.length, 2);
   assert.deepEqual(reqs.map((r) => r.provider).sort(), ["coingecko", "yahoo"]);
   assert.deepEqual(reqs.find((r) => r.provider === "yahoo").assets, ["VOO", "AAPL"]);
 });
 
 test("an empty partition produces no request", () => {
-  assert.deepEqual(quoteRequests([], "AUD"), []);
-  assert.deepEqual(quoteRequests(["VOO"], "AUD").map((r) => r.provider), ["yahoo"]);
-  assert.deepEqual(quoteRequests(["crypto:bitcoin"], "AUD").map((r) => r.provider), ["coingecko"]);
+  assert.deepEqual(quoteRequests([]), []);
+  assert.deepEqual(quoteRequests(["VOO"]).map((r) => r.provider), ["yahoo"]);
+  assert.deepEqual(quoteRequests(["crypto:bitcoin"]).map((r) => r.provider), ["coingecko"]);
 });
 
 test("a bare crypto: prefix is unknown and produces no request", () => {
-  assert.deepEqual(quoteRequests(["crypto:"], "AUD"), []);
-  assert.deepEqual(historyRequests(["crypto:"], "1W", "AUD", () => undefined), []);
+  assert.deepEqual(quoteRequests(["crypto:"]), []);
+  assert.deepEqual(historyRequests(["crypto:"], "1W", () => undefined), []);
 });
 
-test("history passes base currency to CoinGecko and kindOf to Yahoo", () => {
+test("history asks CoinGecko in US dollars and passes kindOf to Yahoo", () => {
   const kindOf = (a) => (a === "VTSAX" ? "fund" : undefined);
-  const reqs = historyRequests(["VTSAX", "AAPL", "crypto:bitcoin"], "1D", "usd".toUpperCase(), kindOf);
+  const reqs = historyRequests(["VTSAX", "AAPL", "crypto:bitcoin"], "1D", kindOf);
   const cg = reqs.filter((r) => r.provider === "coingecko");
   const yh = reqs.filter((r) => r.provider === "yahoo");
   assert.equal(cg.length, 1);

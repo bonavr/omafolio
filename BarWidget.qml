@@ -48,7 +48,9 @@ BarWidget {
     quotes: market.quotes,
     states: market.states,
     portfolio: market.portfolio,
-    providerHealth: market.providerHealth
+    providerHealth: market.providerHealth,
+    baseCurrency: market.config.baseCurrency,
+    nativePrices: market.config.nativePrices
   }) : null
 
   // A wheel step holds the rotation still for this long, so the item the user

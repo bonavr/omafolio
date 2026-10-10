@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { barFrame } from "../lib/barframe.mjs";
+import { barFrame, displayPrice } from "../lib/barframe.mjs";
 
 const FRI_1600 = new Date(2026, 9, 9, 16, 0).getTime();
 const FAIL_1402 = new Date(2026, 9, 9, 14, 2).getTime();
@@ -20,6 +20,7 @@ const view = (over) => Object.assign({
 const data = (over) => Object.assign({
   quotes, states: { VOO: "live", VTSAX: "live", "crypto:bitcoin": "live" },
   portfolio: view(), providerHealth: { yahoo: healthy, coingecko: healthy },
+  baseCurrency: "USD", nativePrices: true,
 }, over);
 
 test("asset frame: label, value, change", () => {
@@ -118,4 +119,52 @@ test("portfolio with nothing valued: dash once every provider has been tried, el
   assert.equal(barFrame("portfolio", data({ portfolio: empty })).value, "—");
   assert.equal(barFrame("portfolio", data({ portfolio: empty, providerHealth: { yahoo: fresh, coingecko: healthy } })).value, "…");
   assert.equal(barFrame("portfolio", data({ portfolio: view({ positions: [] }), providerHealth: { yahoo: fresh, coingecko: fresh } })).value, "—");
+});
+
+// ---- Which currency an asset's price is shown in
+
+const usdaud = { "USDAUD=X": q("USDAUD=X", "USDAUD=X", 1.5, 1.5, "yahoo", { currency: "AUD", kind: "fx" }) };
+
+test("displayPrice with native prices on: the price in its own currency, FX or not", () => {
+  assert.deepEqual(displayPrice(82699, "USD", "AUD", usdaud, true), { amount: 82699, currency: "USD" });
+  assert.deepEqual(displayPrice(82699, "USD", "AUD", {}, true), { amount: 82699, currency: "USD" });
+  assert.deepEqual(displayPrice(82699, "USD", "USD", {}, true), { amount: 82699, currency: "USD" });
+});
+
+test("displayPrice with native prices off: converted to the base currency at the current rate", () => {
+  assert.deepEqual(displayPrice(100, "USD", "AUD", usdaud, false), { amount: 150, currency: "AUD" });
+  // Already in the base currency: unchanged, no rate needed.
+  assert.deepEqual(displayPrice(100, "AUD", "AUD", {}, false), { amount: 100, currency: "AUD" });
+});
+
+test("displayPrice with native prices off and no rate falls back to the native price", () => {
+  assert.deepEqual(displayPrice(100, "USD", "AUD", {}, false), { amount: 100, currency: "USD" });
+  // A rate for another pair does not help.
+  assert.deepEqual(displayPrice(100, "EUR", "AUD", usdaud, false), { amount: 100, currency: "EUR" });
+});
+
+test("bar asset frame, native prices on: own currency with its prefix when it is not the base", () => {
+  const btc = barFrame("crypto:bitcoin", data({ baseCurrency: "AUD", quotes: Object.assign({}, quotes, usdaud) }));
+  assert.deepEqual([btc.label, btc.value, btc.change], ["₿", "US$118,066", "▲ 1.4%"]);
+  assert.equal(barFrame("VOO", data({ baseCurrency: "AUD" })).value, "US$715.59");
+  // In the base currency the price is plain.
+  assert.equal(barFrame("crypto:bitcoin", data({ baseCurrency: "USD" })).value, "118,066");
+});
+
+test("bar asset frame, native prices off: converted to the base and plain; native with prefix without a rate", () => {
+  const withRate = data({ baseCurrency: "AUD", nativePrices: false, quotes: Object.assign({}, quotes, usdaud) });
+  const btc = barFrame("crypto:bitcoin", withRate);
+  // 118066 × 1.5 = 177099; the move is the quote's own.
+  assert.deepEqual([btc.value, btc.change, btc.direction], ["177,099", "▲ 1.4%", "up"]);
+  assert.equal(barFrame("VOO", withRate).value, "1,073");
+  const noRate = data({ baseCurrency: "AUD", nativePrices: false });
+  assert.deepEqual([barFrame("crypto:bitcoin", noRate).value, barFrame("crypto:bitcoin", noRate).change], ["US$118,066", "▲ 1.4%"]);
+  assert.equal(barFrame("VOO", data({ baseCurrency: "USD", nativePrices: false })).value, "715.59");
+});
+
+test("portfolio frame stays plain in the base currency whatever nativePrices says", () => {
+  for (const nativePrices of [true, false]) {
+    const f = barFrame("portfolio", data({ baseCurrency: "AUD", nativePrices }));
+    assert.equal(f.value, "412,300");
+  }
 });

@@ -110,8 +110,9 @@ Provider-specific facts that stay inside providers:
   intraday history, so a 1D
   request for a fund returns the last five daily NAVs. Quotes in minor units
   (for example GBp) are converted to major units here.
-- CoinGecko: quotes and history are requested directly in the base currency,
-  so crypto never needs FX. Search maps CoinGecko ids to `crypto:<id>`.
+- CoinGecko: quotes and history are always requested in US dollars, and
+  crypto is converted to the base currency through the same FX pairs as US
+  stocks. Search maps CoinGecko ids to `crypto:<id>`.
 
 ### Market: where prices come from and how fresh they are
 
@@ -209,6 +210,7 @@ Settings, in the widget's `shell.json` entry:
   "refreshSeconds": 60,           // minimum 60
   "rotateSeconds": 5,
   "range": "1M",                  // 1D | 1W | 1M | 1Y, the range the panel opens on
+  "nativePrices": true,           // asset prices in their own currency; false converts them to base
   "bar": ["crypto:bitcoin"],      // rotation order; "portfolio" is the total
   "watch": []                     // asset refs followed but not held
 }
@@ -228,8 +230,9 @@ Holdings:
 
 - `cost` is average cost per unit.
 - `costCurrency` is omitted when it is the asset's listing currency. Crypto
-  has no listing currency, so crypto holdings always store it (defaulting to
-  the base currency at the time of adding).
+  has no listing currency (its quotes are in US dollars only because
+  CoinGecko is asked in them), so crypto holdings always store it (defaulting
+  to the base currency at the time of adding).
 
 Bad values are corrected rather than reported: `refreshSeconds` below 60 is
 used as 60, an unknown currency falls back to USD with a note in settings, and
@@ -255,6 +258,11 @@ from the active Omarchy theme.
   colour and add ⚠; a tooltip names the stale assets and since when.
 - Values show in full with separators when they fit in seven characters, and
   in compact form otherwise (`412.3k`).
+- An asset's price is in its own currency (`nativePrices`, default on; crypto
+  in US dollars) or converted to the base currency (off, falling back to the
+  native price while no rate is known). Any amount not in the base currency
+  carries its prefix outside the seven-character rule (`₿ US$82,699 ▲ 0.4%`
+  with base AUD); the portfolio total is always in the base currency, plain.
 
 ### Panel
 
@@ -278,7 +286,9 @@ from the active Omarchy theme.
 
 One scrolling page, opened from the gear. Every change saves at once.
 
-- **General:** base currency, refresh interval (60 s minimum; the stepper
+- **General:** base currency, a "Show prices in each asset's own currency"
+  switch (`nativePrices`) with the hint "Totals, values and gains stay in
+  <BASE>.", refresh interval (60 s minimum; the stepper
   can't go below it, a lower typed value snaps back on blur, and a note
   explains why), and the range the panel opens on.
 - **Bar rotation:** rotation interval; the rotation list with drag to reorder
