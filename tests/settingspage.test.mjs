@@ -125,3 +125,23 @@ test("parentDir drops the last component", () => {
   assert.equal(parentDir("/portfolio.json"), "/");
   assert.equal(parentDir("portfolio.json"), "/");
 });
+
+test("parseAmount refuses a decimal comma or misplaced separators instead of dropping them", () => {
+  for (const bad of ["1,5", "0,05", "12,50", "1,2,3", "1234,567", ",5", "1,", "1,,000", "1,0000"]) {
+    assert.equal(parseAmount(bad), null, bad);
+  }
+});
+
+test("parseAmount accepts thousands groups of exactly three, as formatQuantity writes them", () => {
+  assert.equal(parseAmount("61,000"), 61000);
+  assert.equal(parseAmount("1,250.5"), 1250.5);
+  assert.equal(parseAmount("1,000,000.25"), 1000000.25);
+  assert.equal(parseAmount("999"), 999);
+  assert.equal(parseAmount("1,000"), 1000);
+});
+
+test("snapSeconds refuses misplaced separators", () => {
+  assert.equal(snapSeconds("1,20", 60), null);
+  assert.equal(snapSeconds("1,2,0", 60), null);
+  assert.deepEqual(snapSeconds("1,200", 60), { seconds: 1200, snapped: false });
+});

@@ -62,28 +62,63 @@ FocusScope {
       panel.bar.shell.updateEntryInline(panel.moduleName, entry)
   }
 
+  // Listing currency of each held asset whose quote has said it; crypto has
+  // none. Record<asset, currency>.
+  readonly property var listing: {
+    var out = {}
+    for (var i = 0; i < holdings.length; i++) {
+      var asset = holdings[i].asset
+      var quote = quotes[asset]
+      if (quote && asset.indexOf("crypto:") !== 0) out[asset] = quote.currency
+    }
+    return out
+  }
+
+  // Every save stores no costCurrency that equals the asset's listing
+  // currency (the file's rule).
   function saveHoldings(list) {
-    return !locked && market.saveHoldings(list)
+    return !locked && market.saveHoldings(Holdings.withoutListingCostCurrency(list, listing))
   }
 
-  // `holding` may be gone (a row being torn down finishing its edit).
-  function editHolding(holding, changes) {
-    if (holding) saveHoldings(Holdings.editHolding(holdings, holding.asset, holding.costCurrency, changes))
+  // A cost currency chosen before the asset's quote arrived may turn out to be
+  // its listing currency; drop it then. Waits while a field is being edited,
+  // since that changes the holding's identity under the edit.
+  function tidyCostCurrencies() {
+    if (locked || activeFocus) return
+    var tidied = Holdings.withoutListingCostCurrency(holdings, listing)
+    if (tidied !== holdings) market.saveHoldings(tidied)
   }
 
-  function setCostCurrency(holding, listing, chosen) {
+  onListingChanged: tidyCostCurrencies()
+  onActiveFocusChanged: if (!activeFocus) Qt.callLater(tidyCostCurrencies)
+  Component.onCompleted: tidyCostCurrencies()
+
+  // Changes the holding with `identity` ({asset, costCurrency}); nothing when
+  // no holding has it any more.
+  function editHolding(identity, changes) {
+    if (!identity) return
+    var next = Holdings.editHolding(holdings, identity.asset, identity.costCurrency, changes)
+    if (next !== holdings) saveHoldings(next)
+  }
+
+  // Structural changes first let a field still being edited save into its own
+  // row: losing the keyboard finishes the edit.
+  function setCostCurrency(holding, listingCurrency, chosen) {
+    unfocus()
     if (!holding) return
-    var next = Holdings.costCurrencyFor(holding.asset, chosen, listing)
+    var next = Holdings.costCurrencyFor(holding.asset, chosen, listingCurrency)
     if (next !== holding.costCurrency) editHolding(holding, { costCurrency: next })
   }
 
   function removeHolding(holding) {
+    unfocus()
     if (holding) saveHoldings(Holdings.withoutHolding(holdings, holding.asset, holding.costCurrency))
   }
 
   // Adds a searched asset as a holding (or finds the one already held) and puts
   // the cursor in its quantity field.
   function addHolding(result) {
+    unfocus()
     var added = Holdings.addHolding(holdings, result.asset, base)
     if (added.added && !saveHoldings(added.holdings)) return
     holdingSearch.clear()
@@ -253,23 +288,44 @@ FocusScope {
     }
   }
 
-  // A quantity or cost, saved on Enter or blur. Text that is not a number
+  // A quantity or cost of `holding`, saved on Enter or blur. Only an edit
+  // saves: text left as it was shown writes nothing, so a value with more
+  // decimals than shown is never rounded by a visit. Text that is not a number
   // puts the stored value back; Esc does too. `prefix` is drawn inside the
   // field before the number, and `menu` adds a ▾ that asks for a menu.
+  //
+  // Rows follow the list by position, so the holding behind a row can change
+  // under an edit (a removal, a reorder of the file). The edit belongs to the
+  // holding the field had when it took the keyboard: `commit` hands back that
+  // identity ({asset, costCurrency}), and the page saves into it or nowhere.
   component AmountField: TextField {
     id: amount
+    property var holding: null
     property real current: 0
     property string prefix: ""
     property bool menu: false
-    signal commit(real value)
+    signal commit(var identity, real value)
     signal menuRequested()
+
+    // Set when the field takes the keyboard: whose value is being edited, and
+    // the text it showed then.
+    property var editing: null
+    property string shownText: ""
 
     function stored() { return Format.formatQuantity(current) }
 
+    onActiveFocusChanged: {
+      if (!activeFocus) return
+      editing = holding ? { asset: holding.asset, costCurrency: holding.costCurrency } : null
+      shownText = text
+    }
+
     function finish() {
-      var value = PageLib.parseAmount(text)
-      if (value !== null && value !== current) commit(value)
+      var value = text !== shownText ? PageLib.parseAmount(text) : null
+      if (editing && value !== null) commit(editing, value)
       text = stored()
+      shownText = text
+      if (!activeFocus) editing = null
     }
 
     readOnly: page.locked
@@ -289,6 +345,7 @@ FocusScope {
 
     Keys.onPressed: function(event) {
       if (event.key === Qt.Key_Escape) {
+        editing = null
         text = stored()
         page.unfocus()
         event.accepted = true
@@ -935,8 +992,9 @@ FocusScope {
           anchors.rightMargin: page.gap
           anchors.verticalCenter: parent.verticalCenter
           width: page.quantityWidth
+          holding: holdingRow.holding
           current: holdingRow.holding ? holdingRow.holding.quantity : 0
-          onCommit: function(value) { page.editHolding(holdingRow.holding, { quantity: value }) }
+          onCommit: function(identity, value) { page.editHolding(identity, { quantity: value }) }
         }
 
         AmountField {
@@ -948,7 +1006,8 @@ FocusScope {
           current: holdingRow.holding ? holdingRow.holding.cost : 0
           prefix: holdingRow.costCurrency !== "" ? Format.currencyPrefix(holdingRow.costCurrency, page.base).trim() : ""
           menu: !page.locked
-          onCommit: function(value) { page.editHolding(holdingRow.holding, { cost: value }) }
+          holding: holdingRow.holding
+          onCommit: function(identity, value) { page.editHolding(identity, { cost: value }) }
           onMenuRequested: costMenu.openFor(costField, holdingRow.holding, holdingRow.listing || null)
         }
 

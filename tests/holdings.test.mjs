@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseHoldings, serializeHoldings, withHolding, withoutHolding, defaultCostCurrency, jsonErrorLine,
-  addHolding, editHolding, costCurrencyFor,
+  addHolding, editHolding, costCurrencyFor, withoutListingCostCurrency,
 } from "../lib/holdings.mjs";
 
 const SPEC_EXAMPLE = `{ "holdings": [
@@ -358,8 +358,8 @@ test("editHolding moves a holding to another currency in place, or back to listi
 
 test("editHolding of an identity no longer held changes nothing", () => {
   const start = parseHoldings(SPEC_EXAMPLE).holdings;
-  assert.deepEqual(editHolding(start, "VOO", "USD", { quantity: 1 }), start);
-  assert.deepEqual(editHolding(start, "AAPL", undefined, { quantity: 1 }), start);
+  assert.equal(editHolding(start, "VOO", "USD", { quantity: 1 }), start);
+  assert.equal(editHolding(start, "AAPL", undefined, { quantity: 1 }), start);
 });
 
 test("costCurrencyFor omits the listing currency for listed assets only", () => {
@@ -367,4 +367,45 @@ test("costCurrencyFor omits the listing currency for listed assets only", () => 
   assert.equal(costCurrencyFor("VOO", "AUD", "USD"), "AUD");
   assert.equal(costCurrencyFor("VOO", "USD", null), "USD");
   assert.equal(costCurrencyFor("crypto:bitcoin", "AUD", "AUD"), "AUD");
+});
+
+test("withoutListingCostCurrency drops a costCurrency equal to the listing currency", () => {
+  const start = [
+    { asset: "VTI", quantity: 10, cost: 250.5, costCurrency: "USD" },
+    { asset: "VOO", quantity: 12, cost: 600, costCurrency: "AUD" },
+    { asset: "crypto:bitcoin", quantity: 0.05, cost: 61000, costCurrency: "AUD" },
+  ];
+  const out = withoutListingCostCurrency(start, { VTI: "USD", VOO: "USD", "crypto:bitcoin": "AUD" });
+  assert.deepEqual(out[0], { asset: "VTI", quantity: 10, cost: 250.5 });
+  assert.ok(!("costCurrency" in out[0]));
+  assert.equal(out[1], start[1]);
+  assert.equal(out[2], start[2]);
+  assert.equal(start[0].costCurrency, "USD");
+});
+
+test("withoutListingCostCurrency returns the same list when nothing is redundant", () => {
+  const start = [
+    { asset: "VTI", quantity: 1, cost: 1 },
+    { asset: "VOO", quantity: 1, cost: 1, costCurrency: "AUD" },
+    { asset: "AAPL", quantity: 1, cost: 1, costCurrency: "USD" },
+  ];
+  // VOO lists in USD (differs); AAPL's listing currency is not known yet.
+  assert.equal(withoutListingCostCurrency(start, { VTI: "USD", VOO: "USD" }), start);
+  const empty = [];
+  assert.equal(withoutListingCostCurrency(empty, {}), empty);
+});
+
+test("withoutListingCostCurrency never touches crypto, whose costCurrency is always stored", () => {
+  const start = [{ asset: "crypto:solana", quantity: 1, cost: 1, costCurrency: "USD" }];
+  assert.equal(withoutListingCostCurrency(start, { "crypto:solana": "USD" }), start);
+});
+
+test("withoutListingCostCurrency output merges with an existing listing-currency entry on save", () => {
+  const start = [
+    { asset: "VTI", quantity: 10, cost: 200 },
+    { asset: "VTI", quantity: 10, cost: 300, costCurrency: "USD" },
+  ];
+  const parsed = parseHoldings(serializeHoldings(withoutListingCostCurrency(start, { VTI: "USD" })));
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.ok && parsed.holdings, [{ asset: "VTI", quantity: 20, cost: 250 }]);
 });
