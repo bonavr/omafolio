@@ -5,6 +5,7 @@ import "lib/settings.mjs" as Settings
 import "lib/market.mjs" as Market
 import "lib/portfolio.mjs" as Portfolio
 import "lib/holdings.mjs" as Holdings
+import "lib/quotecache.mjs" as QuoteCache
 import "lib/providers/index.mjs" as Providers
 
 // Prices, history, search and holdings for the widget and panel. This is the
@@ -23,6 +24,11 @@ import "lib/providers/index.mjs" as Providers
 //   are marked fromCache, so they show as stale until refreshed) and rewritten
 //   after successful fetches.
 // Both files are written atomically with mode 600.
+//
+// This is the plugin's `service` entry point: the shell mounts one instance and
+// every bar widget (one per monitor) shares it, so each request and each file
+// write happens once. Widgets find it with bar.shell.serviceFor(<plugin id>)
+// and push their settings into `settings`.
 QtObject {
   id: root
 
@@ -31,8 +37,10 @@ QtObject {
   // ---- Inputs
 
   // The widget's settings entry, raw or already normalised (normalising is
-  // idempotent); bad values are replaced and explained in `notes`.
-  property var settings: ({})
+  // idempotent); bad values are replaced and explained in `notes`. Null until a
+  // widget supplies it, and nothing is fetched before then, so the defaults are
+  // never fetched by mistake. Every widget pushes the same bar entry.
+  property var settings: null
   // Whether the panel is showing. history() fetches only while it is.
   property bool panelOpen: false
 
@@ -270,45 +278,15 @@ QtObject {
     ready = true
   }
 
-  // Adopts cached quotes for assets that have no fresher quote yet. Entries
-  // that are not well-formed quotes are skipped; an unreadable cache is
-  // ignored and rebuilt.
+  // Adopts cached quotes (lib/quotecache.mjs drops malformed entries) for
+  // assets that have no fresher quote yet.
   function cacheRead(text) {
-    var data = null
-    try {
-      data = JSON.parse(text)
-    } catch (e) {
-      return
-    }
-    var cached = data && typeof data.quotes === "object" && data.quotes !== null ? data.quotes : {}
-    var adopted = {}
-    for (const asset in cached) {
-      var q = cached[asset]
-      if (isQuote(q, asset) && !quotes[asset]) adopted[asset] = Object.assign({}, q, { fromCache: true })
-    }
-    quotes = Object.assign(adopted, quotes)
+    quotes = Object.assign(QuoteCache.parseQuoteCache(text), quotes)
     cacheText = text
   }
 
-  function isQuote(q, asset) {
-    var num = function(v) { return typeof v === "number" && isFinite(v) }
-    var str = function(v) { return typeof v === "string" }
-    if (!q || typeof q !== "object" || q.asset !== asset) return false
-    if (!num(q.price) || !num(q.previousClose) || !num(q.asOf)) return false
-    if (!str(q.symbol) || !str(q.name) || !str(q.currency) || !str(q.kind)) return false
-    if (q.provider !== Providers.providerFor(asset).id) return false
-    var s = q.session
-    return s === null || (typeof s === "object" && num(s.start) && num(s.end) && str(s.timezone))
-  }
-
   function writeCache() {
-    var plain = {}
-    for (const asset in quotes) {
-      var copy = Object.assign({}, quotes[asset])
-      delete copy.fromCache
-      plain[asset] = copy
-    }
-    var text = JSON.stringify({ quotes: plain })
+    var text = QuoteCache.serializeQuoteCache(quotes)
     if (text === cacheText) return
     cacheText = text
     cacheWriter.write(text)
@@ -369,8 +347,9 @@ QtObject {
     required property string provider
     required property QtObject service
 
-    // Assets this provider should be asked for now (none until holdings are read).
-    readonly property var assets: service.ready ? service.assetsFor(provider) : []
+    // Assets this provider should be asked for now (none until the holdings
+    // file has been read and a widget has supplied settings).
+    readonly property var assets: service.ready && service.settings !== null ? service.assetsFor(provider) : []
     readonly property string wantKey: service.config.baseCurrency + "|" + assets.join(",")
     // What the latest round asked for (crypto prices depend on the base currency).
     property var requested: []
