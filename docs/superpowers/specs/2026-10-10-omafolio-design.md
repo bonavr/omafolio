@@ -279,6 +279,14 @@ from the active Omarchy theme.
   portfolio and today's range) and highlights the row. `← Portfolio` or Esc
   goes back. On the Watchlist tab the same view shows without the holding
   stats.
+- **Currencies in the panel:** totals, values and gains are in the base
+  currency. Watchlist rows and the watched hero show the price in the asset's
+  own currency, or, with `nativePrices` off, converted to the base (the native
+  price while no rate is known). The position view's quantity × price is
+  always native. The day range is in the same currency as the price beside it
+  (native in the position view); when that is not the base currency, the stat
+  is labelled `Day range · <prefix>` (`Day range · US$`) and the numbers stay
+  bare, since the cell has no room for a prefix.
 - Stale and missing assets follow the price states above, with ⚠ tooltips on
   the row and on the total.
 

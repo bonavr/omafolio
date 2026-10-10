@@ -7,21 +7,24 @@ const q = (asset, price, previousClose, currency, kind = "stock") => ({
   asset, symbol: asset, name: asset, price, previousClose, currency, kind, asOf: 0, session: null,
   provider: asset.startsWith("crypto:") ? "coingecko" : "yahoo",
 });
-const BTC_AUD = 100000;
-const BTC_PREV_AUD = 98000;
+// Crypto is priced in US dollars, like VOO; VAS is listed in AUD, the base most tests use.
+const BTC_USD = 70000;
+const BTC_PREV_USD = 69000;
 const quotes = {
   VOO: q("VOO", 715.59, 711.28, "USD", "etf"),
   AAPL: q("AAPL", 336.64, 340.42, "USD"),
-  "crypto:bitcoin": q("crypto:bitcoin", BTC_AUD, BTC_PREV_AUD, "AUD", "crypto"),
+  "crypto:bitcoin": q("crypto:bitcoin", BTC_USD, BTC_PREV_USD, "USD", "crypto"),
   VTSAX: q("VTSAX", 185.93, 185.93, "USD", "fund"),
+  VAS: q("VAS", 100, 99, "AUD", "etf"),
   "USDAUD=X": q("USDAUD=X", 1.431, 1.43, "AUD", "fx"),
 };
+const vasHolding = { asset: "VAS", quantity: 10, cost: 90 };
 const holdings = [
   { asset: "VOO", quantity: 12, cost: 410.25 },
   { asset: "AAPL", quantity: 20, cost: 180 },
   { asset: "crypto:bitcoin", quantity: 0.05, cost: 61000, costCurrency: "AUD" },
 ];
-const allLive = { VOO: "live", AAPL: "live", "crypto:bitcoin": "live", VTSAX: "live", "USDAUD=X": "live" };
+const allLive = { VOO: "live", AAPL: "live", "crypto:bitcoin": "live", VTSAX: "live", VAS: "live", "USDAUD=X": "live", "AUDUSD=X": "live" };
 const pos = (v, asset) => v.positions.find((p) => p.asset === asset);
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 const without = (obj, key) => Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key));
@@ -45,7 +48,7 @@ test("values convert to base", () => {
   const v = valuePortfolio(holdings, quotes, allLive, "AUD");
   assert.ok(near(pos(v, "VOO").value, 12 * 715.59 * 1.431));
   assert.ok(near(pos(v, "AAPL").value, 20 * 336.64 * 1.431));
-  assert.ok(near(pos(v, "crypto:bitcoin").value, 0.05 * BTC_AUD));
+  assert.ok(near(pos(v, "crypto:bitcoin").value, 0.05 * BTC_USD * 1.431));
   assert.ok(near(v.total, sum(v.positions.map((p) => p.value))));
 });
 test("day change and percentage use previous close at today's FX", () => {
@@ -65,21 +68,33 @@ test("gain without costCurrency is market move at today's FX", () => {
 });
 test("gain with costCurrency in base includes currency movement", () => {
   const v = valuePortfolio(holdings, quotes, allLive, "AUD");
-  assert.ok(near(pos(v, "crypto:bitcoin").gain, 0.05 * BTC_AUD - 0.05 * 61000));
-  assert.ok(near(pos(v, "crypto:bitcoin").gainPct, ((BTC_AUD - 61000) / 61000) * 100));
+  assert.ok(near(pos(v, "crypto:bitcoin").gain, 0.05 * BTC_USD * 1.431 - 0.05 * 61000));
+  assert.ok(near(pos(v, "crypto:bitcoin").gainPct, ((BTC_USD * 1.431 - 61000) / 61000) * 100));
 });
 test("crypto priced in US dollars is valued through USDAUD=X; a cached AUD crypto quote still values at 1", () => {
   const h = [{ asset: "crypto:bitcoin", quantity: 0.05, cost: 61000, costCurrency: "AUD" }];
-  const usd = { ...quotes, "crypto:bitcoin": q("crypto:bitcoin", 70000, 69000, "USD", "crypto") };
-  const v = valuePortfolio(h, usd, allLive, "AUD");
-  assert.ok(near(pos(v, "crypto:bitcoin").value, 0.05 * 70000 * 1.431));
-  assert.ok(near(pos(v, "crypto:bitcoin").gain, 0.05 * 70000 * 1.431 - 0.05 * 61000));
-  assert.ok(near(pos(v, "crypto:bitcoin").dayChange, 0.05 * 1000 * 1.431));
+  const v = valuePortfolio(h, quotes, allLive, "AUD");
+  assert.ok(near(pos(v, "crypto:bitcoin").dayChange, 0.05 * (BTC_USD - BTC_PREV_USD) * 1.431));
   // Without the rate the coin cannot be valued, like any US-listed asset.
-  assert.deepEqual(valuePortfolio(h, without(usd, "USDAUD=X"), allLive, "AUD").excluded, ["crypto:bitcoin"]);
-  // The old AUD quote from the cache needs no rate in an AUD portfolio.
-  const cached = valuePortfolio(h, without(quotes, "USDAUD=X"), allLive, "AUD");
-  assert.ok(near(pos(cached, "crypto:bitcoin").value, 0.05 * BTC_AUD));
+  assert.deepEqual(valuePortfolio(h, without(quotes, "USDAUD=X"), allLive, "AUD").excluded, ["crypto:bitcoin"]);
+  // A quote cached from when crypto was priced in the base needs no rate in an AUD portfolio.
+  const cachedAud = { ...without(quotes, "USDAUD=X"), "crypto:bitcoin": q("crypto:bitcoin", 100000, 98000, "AUD", "crypto") };
+  const cached = valuePortfolio(h, cachedAud, allLive, "AUD");
+  assert.ok(near(pos(cached, "crypto:bitcoin").value, 0.05 * 100000));
+});
+test("crypto without costCurrency has its cost read in US dollars, its quote currency", () => {
+  const v = valuePortfolio([{ asset: "crypto:bitcoin", quantity: 1, cost: 60000 }], quotes, allLive, "AUD");
+  assert.ok(near(pos(v, "crypto:bitcoin").gain, (BTC_USD - 60000) * 1.431));
+  assert.ok(near(pos(v, "crypto:bitcoin").gainPct, ((BTC_USD - 60000) / 60000) * 100));
+});
+test("crypto bought in AUD under a USD base converts its cost through AUDUSD=X", () => {
+  const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 61000, costCurrency: "AUD" }];
+  const withRate = { ...quotes, "AUDUSD=X": q("AUDUSD=X", 0.7, 0.7, "USD", "fx") };
+  const v = valuePortfolio(h, withRate, allLive, "USD");
+  assert.ok(near(pos(v, "crypto:bitcoin").value, BTC_USD));
+  assert.ok(near(pos(v, "crypto:bitcoin").gain, BTC_USD - 61000 * 0.7));
+  // No AUDUSD=X rate: the cost cannot be converted, so the position is left out.
+  assert.deepEqual(valuePortfolio(h, quotes, allLive, "USD").excluded, ["crypto:bitcoin"]);
 });
 test("cost currency differing from listing currency is converted at its own rate", () => {
   // VOO lists in USD but was bought for 600 AUD per unit.
@@ -120,14 +135,13 @@ test("a stale listing-currency FX quote is listed once, even when several positi
   assert.ok(pos(v, "VOO").value > 0);
 });
 test("a stale cost-currency FX quote is listed", () => {
-  const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 10, costCurrency: "USD" }];
+  const h = [{ asset: "VAS", quantity: 1, cost: 10, costCurrency: "USD" }];
   const v = valuePortfolio(h, quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD");
   assert.deepEqual(v.stale, ["USDAUD=X"]);
 });
 test("a live FX quote adds nothing to stale, and a stale one is ignored when no position uses it", () => {
   assert.deepEqual(valuePortfolio(holdings, quotes, allLive, "AUD").stale, []);
-  const onlyBtc = [holdings[2]];
-  assert.deepEqual(valuePortfolio(onlyBtc, quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD").stale, []);
+  assert.deepEqual(valuePortfolio([vasHolding], quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD").stale, []);
 });
 test("stale asset and stale FX are both listed", () => {
   const v = valuePortfolio(holdings, quotes, { ...allLive, VOO: "stale", "USDAUD=X": "stale" }, "AUD");
@@ -138,18 +152,18 @@ test("closed prices are not stale", () => {
   assert.deepEqual(v.stale, []);
 });
 test("missing FX excludes the position and lists it", () => {
-  const v = valuePortfolio(holdings, without(quotes, "USDAUD=X"), allLive, "AUD");
-  assert.deepEqual([...v.excluded].sort(), ["AAPL", "VOO"]);
-  assert.ok(near(v.total, 0.05 * BTC_AUD));
+  const v = valuePortfolio([...holdings, vasHolding], without(quotes, "USDAUD=X"), allLive, "AUD");
+  assert.deepEqual([...v.excluded].sort(), ["AAPL", "VOO", "crypto:bitcoin"]);
+  assert.ok(near(v.total, 10 * 100));
 });
 test("excluded positions are kept with null figures and sort after valued ones", () => {
-  const v = valuePortfolio(holdings, without(quotes, "USDAUD=X"), allLive, "AUD");
-  assert.deepEqual(v.positions.map((p) => p.asset), ["crypto:bitcoin", "VOO", "AAPL"]);
+  const v = valuePortfolio([...holdings, vasHolding], without(quotes, "USDAUD=X"), allLive, "AUD");
+  assert.deepEqual(v.positions.map((p) => p.asset), ["VAS", "VOO", "AAPL", "crypto:bitcoin"]);
   for (const k of ["value", "dayChange", "dayChangePct", "gain", "gainPct", "weight"]) {
     assert.equal(pos(v, "VOO")[k], null, k);
   }
   assert.equal(pos(v, "VOO").quantity, 12);
-  assert.equal(pos(v, "crypto:bitcoin").weight, 100);
+  assert.equal(pos(v, "VAS").weight, 100);
 });
 test("missing price excludes the position", () => {
   const v = valuePortfolio(holdings, without(quotes, "VOO"), allLive, "AUD");
@@ -275,12 +289,27 @@ test("a fund with five daily points does not stretch a 1D series beyond the stoc
   assert.equal(s.points.length, 27);
   assert.equal(rangeChange(s).change, 0);
 });
-test("an FX series that starts after the asset series moves the start", () => {
+test("an FX series that starts after the asset series does not move the start; its first rate applies before it", () => {
   const h = [{ asset: "VOO", quantity: 1, cost: 1 }];
   const voo = series("VOO", "USD", [[noon(0), 100], [noon(1), 100], [noon(2), 100]]);
-  const fx = series("USDAUD=X", "AUD", [[noon(1), 1.5], [noon(2), 1.5]]);
+  const fx = series("USDAUD=X", "AUD", [[noon(1), 1.5], [noon(2), 1.6]]);
   const s = combinedSeries(h, { VOO: voo, "USDAUD=X": fx }, quotes, "1M", "AUD");
-  assert.deepEqual(s.points, [[MONDAY + DAY, 150], [MONDAY + 2 * DAY, 150]]);
+  // Day 0 uses the series' first rate (1.5), not the current quote (1.431): no jump where the FX series begins.
+  assert.deepEqual(s.points.map(([t]) => t), [MONDAY, MONDAY + DAY, MONDAY + 2 * DAY]);
+  assert.ok(near(s.points[0][1], 150) && near(s.points[1][1], 150) && near(s.points[2][1], 160));
+});
+test("24 h of USD crypto with a USDAUD=X series that starts late keeps the whole window; flat prices give no change", () => {
+  // At 23:15 UTC Yahoo's 1D FX series has only begun (its day starts at 23:00 UTC), while
+  // CoinGecko's covers the last 24 hours.
+  const end = MONDAY + DAY + 23 * HOUR_MS + MIN15;
+  const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 1 }];
+  const btc = series("crypto:bitcoin", "USD", Array.from({ length: 97 }, (_, i) => [end - 24 * HOUR_MS + i * MIN15, 1000]));
+  const fx = series("USDAUD=X", "AUD", [[end - MIN15, 1.5], [end, 1.5]]);
+  const s = combinedSeries(h, { "crypto:bitcoin": btc, "USDAUD=X": fx }, quotes, "1D", "AUD");
+  assert.equal(s.points.length, 97);
+  assert.equal(s.points[0][0], end - 24 * HOUR_MS);
+  assert.ok(s.points.every(([, v]) => near(v, 1500)));
+  assert.equal(rangeChange(s).change, 0);
 });
 test("an asset with no series, or an empty one, is absent from every bucket", () => {
   const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "crypto:bitcoin", quantity: 1, cost: 1 }, { asset: "AAPL", quantity: 1, cost: 1 }];
@@ -330,24 +359,24 @@ test("an FX point exactly at t + step applies to the next bucket", () => {
   const s2 = combinedSeries(h, { VOO: voo, "USDAUD=X": fxJustBefore }, quotes, "1M", "AUD");
   assert.deepEqual(s2.points.map(([, v]) => v), [150, 150]);
 });
-test("current FX rate is used when there is no FX series or it is empty; a late-starting one moves the start", () => {
+test("current FX rate is used when there is no FX series or it is empty; a late-starting one applies its first rate from the start", () => {
   const h = [{ asset: "VOO", quantity: 1, cost: 1 }];
   const voo = series("VOO", "USD", [[noon(0), 100], [noon(1), 100]]);
   const none = combinedSeries(h, { VOO: voo }, quotes, "1M", "AUD");
   assert.ok(none.points.every(([, v]) => near(v, 143.1)));
   const lateFx = series("USDAUD=X", "AUD", [[noon(1), 1.5]]);
   const late = combinedSeries(h, { VOO: voo, "USDAUD=X": lateFx }, quotes, "1M", "AUD");
-  assert.deepEqual(late.points, [[MONDAY + DAY, 150]]);
+  assert.deepEqual(late.points, [[MONDAY, 150], [MONDAY + DAY, 150]]);
   const emptyFx = series("USDAUD=X", "AUD", []);
   const empty = combinedSeries(h, { VOO: voo, "USDAUD=X": emptyFx }, quotes, "1M", "AUD");
   assert.ok(empty.points.length === 2 && empty.points.every(([, v]) => near(v, 143.1)));
 });
 test("an asset with no FX at all is left out of the bucket", () => {
-  const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "crypto:bitcoin", quantity: 1, cost: 1 }];
+  const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "VAS", quantity: 1, cost: 1 }];
   const voo = series("VOO", "USD", [[noon(0), 100]]);
-  const btc = series("crypto:bitcoin", "AUD", [[noon(0), 1000]]);
+  const vas = series("VAS", "AUD", [[noon(0), 1000]]);
   const noFx = without(quotes, "USDAUD=X");
-  const s = combinedSeries(h, { VOO: voo, "crypto:bitcoin": btc }, noFx, "1M", "AUD");
+  const s = combinedSeries(h, { VOO: voo, VAS: vas }, noFx, "1M", "AUD");
   assert.deepEqual(s.points, [[MONDAY, 1000]]);
   const onlyVoo = combinedSeries([h[0]], { VOO: voo }, noFx, "1M", "AUD");
   assert.deepEqual(onlyVoo.points, []);

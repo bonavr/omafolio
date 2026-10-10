@@ -72,6 +72,16 @@ FocusScope {
     return quote && asset.indexOf("crypto:") !== 0 ? quote.currency : null
   }
 
+  // The currency a holding's cost is in, as the portfolio values it: its own
+  // costCurrency, else its quote's currency (US dollars for crypto); null
+  // before a quote has said it. For display and comparison only: an edit
+  // still stores a crypto holding's currency explicitly (listingOf).
+  function costCurrencyOf(holding) {
+    if (holding.costCurrency) return holding.costCurrency
+    var quote = quotes[holding.asset]
+    return quote ? quote.currency : null
+  }
+
   // Saves exactly `list`. Only user actions call this; nothing on the page
   // writes portfolio.json on its own.
   function saveHoldings(list) {
@@ -92,7 +102,7 @@ FocusScope {
   function setCostCurrency(holding, chosen) {
     unfocus()
     // Picking the currency it is already in changes nothing.
-    if (!holding || chosen === (holding.costCurrency || listingOf(holding.asset))) return
+    if (!holding || chosen === costCurrencyOf(holding)) return
     editHolding(holding, { costCurrency: chosen })
   }
 
@@ -574,17 +584,18 @@ FocusScope {
   // Cost-currency choices for one holding, under its cost field.
   QQC.Popup {
     id: costMenu
-    // {holding, listing} of the row that opened it.
+    // {holding, current} of the row that opened it; `current` is the
+    // currency its cost is in now (page.costCurrencyOf), or null.
     property var target: null
     readonly property var options: {
       if (!target) return []
-      var listing = target.listing
-      return listing && Settings.CURRENCIES.indexOf(listing) < 0 ? [listing].concat(Settings.CURRENCIES) : Settings.CURRENCIES
+      var current = target.current
+      return current && Settings.CURRENCIES.indexOf(current) < 0 ? [current].concat(Settings.CURRENCIES) : Settings.CURRENCIES
     }
-    readonly property string selected: target ? (target.holding.costCurrency || target.listing || "") : ""
+    readonly property string selected: target ? (target.current || "") : ""
 
-    function openFor(field, holding, listing) {
-      target = { holding: holding, listing: listing }
+    function openFor(field, holding, current) {
+      target = { holding: holding, current: current }
       parent = field
       x = field.width - width
       y = field.height + Style.space(2)
@@ -995,9 +1006,8 @@ FocusScope {
         required property int index
         readonly property var holding: page.holdings[index]
         readonly property var quote: holding ? page.quotes[holding.asset] : undefined
-        // Listing currency, once a quote has said it; crypto has none (see listingOf).
-        readonly property string listing: holding && quote && holding.asset.indexOf("crypto:") !== 0 ? quote.currency : ""
-        readonly property string costCurrency: holding ? (holding.costCurrency || listing) : ""
+        // The currency the cost is in, once known (page.costCurrencyOf).
+        readonly property string costCurrency: holding ? (page.costCurrencyOf(holding) || "") : ""
 
         function focusQuantity() {
           quantityField.forceActiveFocus()
@@ -1051,7 +1061,7 @@ FocusScope {
           menu: !page.locked
           holding: holdingRow.holding
           onCommit: function(identity, value) { page.editHolding(identity, { cost: value }) }
-          onMenuRequested: costMenu.openFor(costField, holdingRow.holding, holdingRow.listing || null)
+          onMenuRequested: costMenu.openFor(costField, holdingRow.holding, holdingRow.costCurrency || null)
         }
 
         RemoveButton {
