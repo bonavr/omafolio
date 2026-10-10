@@ -64,7 +64,6 @@ BarWidget {
   function step(by) {
     if (count < 2) return
     index = (shown + by + count) % count
-    rotation.restart()
     wheelPaused = true
     wheelResume.restart()
     // The tooltip describes the frame, which just changed.
