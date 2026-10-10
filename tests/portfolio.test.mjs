@@ -101,6 +101,25 @@ test("stale prices count and are listed", () => {
   assert.equal(pos(v, "VOO").state, "stale");
   assert.deepEqual(valuePortfolio(holdings, quotes, allLive, "AUD").stale, []);
 });
+test("a stale listing-currency FX quote is listed once, even when several positions use it", () => {
+  const v = valuePortfolio(holdings, quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD");
+  assert.deepEqual(v.stale, ["USDAUD=X"]);
+  assert.ok(pos(v, "VOO").value > 0);
+});
+test("a stale cost-currency FX quote is listed", () => {
+  const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 10, costCurrency: "USD" }];
+  const v = valuePortfolio(h, quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD");
+  assert.deepEqual(v.stale, ["USDAUD=X"]);
+});
+test("a live FX quote adds nothing to stale, and a stale one is ignored when no position uses it", () => {
+  assert.deepEqual(valuePortfolio(holdings, quotes, allLive, "AUD").stale, []);
+  const onlyBtc = [holdings[2]];
+  assert.deepEqual(valuePortfolio(onlyBtc, quotes, { ...allLive, "USDAUD=X": "stale" }, "AUD").stale, []);
+});
+test("stale asset and stale FX are both listed", () => {
+  const v = valuePortfolio(holdings, quotes, { ...allLive, VOO: "stale", "USDAUD=X": "stale" }, "AUD");
+  assert.deepEqual(v.stale, ["VOO", "USDAUD=X"]);
+});
 test("closed prices are not stale", () => {
   const v = valuePortfolio(holdings, quotes, { ...allLive, VOO: "closed" }, "AUD");
   assert.deepEqual(v.stale, []);
@@ -191,6 +210,7 @@ test("fractional fund units", () => {
 
 const DAY = 86_400_000;
 const MIN15 = 900_000;
+const HOUR_MS = 3_600_000;
 const MONDAY = Date.UTC(2026, 0, 5); // a Monday, midnight UTC
 const noon = (dayIndex) => MONDAY + dayIndex * DAY + DAY / 2;
 const series = (asset, currency, points) => ({ asset, currency, points });
@@ -215,12 +235,45 @@ test("quantity multiplies the series value", () => {
   const s = combinedSeries(h, { VOO: series("VOO", "USD", [[noon(0), 10]]) }, usdQuotes, "1M", "USD");
   assert.deepEqual(s.points, [[MONDAY, 30]]);
 });
-test("an asset with no point yet is left out of earlier buckets", () => {
+test("the grid starts at the latest first point, so a later-starting asset never appears mid-series", () => {
   const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 1 }, { asset: "VOO", quantity: 1, cost: 1 }];
   const btc = series("crypto:bitcoin", "USD", [[noon(0), 1000], [noon(1), 1000]]);
   const voo = series("VOO", "USD", [[noon(1), 700]]);
   const s = combinedSeries(h, { "crypto:bitcoin": btc, VOO: voo }, usdQuotes, "1M", "USD");
-  assert.deepEqual(s.points, [[MONDAY, 1000], [MONDAY + DAY, 1700]]);
+  assert.deepEqual(s.points, [[MONDAY + DAY, 1700]]);
+});
+test("crypto 24h series with a session-only stock series and flat prices has zero range change", () => {
+  const T0 = MONDAY + 14 * HOUR_MS; // stock open, on a 15-minute boundary
+  const h = [{ asset: "crypto:bitcoin", quantity: 1, cost: 1 }, { asset: "VOO", quantity: 1, cost: 1 }];
+  const btc = series("crypto:bitcoin", "USD", Array.from({ length: 97 }, (_, i) => [T0 - 24 * HOUR_MS + i * MIN15, 1000]));
+  const voo = series("VOO", "USD", Array.from({ length: 27 }, (_, i) => [T0 + i * MIN15, 700]));
+  const s = combinedSeries(h, { "crypto:bitcoin": btc, VOO: voo }, usdQuotes, "1D", "USD");
+  assert.equal(s.points[0][0], T0);
+  assert.equal(s.points[0][1], 1700);
+  assert.equal(rangeChange(s).change, 0);
+});
+test("a fund with five daily points does not stretch a 1D series beyond the stock session", () => {
+  const T0 = MONDAY + 14 * HOUR_MS;
+  const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "VTSAX", quantity: 1, cost: 1 }];
+  const voo = series("VOO", "USD", Array.from({ length: 27 }, (_, i) => [T0 + i * MIN15, 700]));
+  const fund = series("VTSAX", "USD", [-4, -3, -2, -1, 0].map((d) => [MONDAY + d * DAY, 185]));
+  const s = combinedSeries(h, { VOO: voo, VTSAX: fund }, usdQuotes, "1D", "USD");
+  assert.equal(s.points[0][0], T0);
+  assert.equal(s.points.length, 27);
+  assert.equal(rangeChange(s).change, 0);
+});
+test("an FX series that starts after the asset series moves the start", () => {
+  const h = [{ asset: "VOO", quantity: 1, cost: 1 }];
+  const voo = series("VOO", "USD", [[noon(0), 100], [noon(1), 100], [noon(2), 100]]);
+  const fx = series("USDAUD=X", "AUD", [[noon(1), 1.5], [noon(2), 1.5]]);
+  const s = combinedSeries(h, { VOO: voo, "USDAUD=X": fx }, quotes, "1M", "AUD");
+  assert.deepEqual(s.points, [[MONDAY + DAY, 150], [MONDAY + 2 * DAY, 150]]);
+});
+test("an asset with no series, or an empty one, is absent from every bucket", () => {
+  const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "crypto:bitcoin", quantity: 1, cost: 1 }, { asset: "AAPL", quantity: 1, cost: 1 }];
+  const voo = series("VOO", "USD", [[noon(0), 5], [noon(1), 6]]);
+  const s = combinedSeries(h, { VOO: voo, AAPL: series("AAPL", "USD", []) }, usdQuotes, "1M", "USD");
+  assert.deepEqual(s.points, [[MONDAY, 5], [MONDAY + DAY, 6]]);
 });
 test("a point exactly at t + step belongs to the next bucket; one at t + step - 1 to this one (1D, 15 min)", () => {
   const T0 = MONDAY;
@@ -264,15 +317,17 @@ test("an FX point exactly at t + step applies to the next bucket", () => {
   const s2 = combinedSeries(h, { VOO: voo, "USDAUD=X": fxJustBefore }, quotes, "1M", "AUD");
   assert.deepEqual(s2.points.map(([, v]) => v), [150, 150]);
 });
-test("current FX rate is used when there is no FX series, or it has no point yet", () => {
+test("current FX rate is used when there is no FX series or it is empty; a late-starting one moves the start", () => {
   const h = [{ asset: "VOO", quantity: 1, cost: 1 }];
   const voo = series("VOO", "USD", [[noon(0), 100], [noon(1), 100]]);
   const none = combinedSeries(h, { VOO: voo }, quotes, "1M", "AUD");
   assert.ok(none.points.every(([, v]) => near(v, 143.1)));
   const lateFx = series("USDAUD=X", "AUD", [[noon(1), 1.5]]);
   const late = combinedSeries(h, { VOO: voo, "USDAUD=X": lateFx }, quotes, "1M", "AUD");
-  assert.ok(near(late.points[0][1], 143.1));
-  assert.equal(late.points[1][1], 150);
+  assert.deepEqual(late.points, [[MONDAY + DAY, 150]]);
+  const emptyFx = series("USDAUD=X", "AUD", []);
+  const empty = combinedSeries(h, { VOO: voo, "USDAUD=X": emptyFx }, quotes, "1M", "AUD");
+  assert.ok(empty.points.length === 2 && empty.points.every(([, v]) => near(v, 143.1)));
 });
 test("an asset with no FX at all is left out of the bucket", () => {
   const h = [{ asset: "VOO", quantity: 1, cost: 1 }, { asset: "crypto:bitcoin", quantity: 1, cost: 1 }];
