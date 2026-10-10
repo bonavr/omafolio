@@ -84,8 +84,8 @@ What `costCurrency` does to the gain:
   movement. Set it to the currency you paid in if you want your real gain.
 
 Entries with the same asset and the same cost currency are combined: quantities
-add and the cost is the quantity-weighted average. The panel tells you when it
-has done this. Unknown keys and invalid numbers are errors.
+add and the cost is the quantity-weighted average. The settings page tells you
+when it has done this. Unknown keys and invalid numbers are errors.
 
 A file that cannot be read (bad JSON, a bad entry) is never written over. The
 panel shows `portfolio.json can't be read` with the line when it can find it,
