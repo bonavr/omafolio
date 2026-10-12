@@ -162,6 +162,9 @@ It holds symbols, prices and times, never quantities. It is safe to delete.
   quote cache) reach the file writer, and request URLs (symbols and search
   text) reach `curl`, on standard input, so other users on the machine cannot
   read them from the process list.
+- The settings page's text fields never touch the clipboard, so they have no
+  paste. Qt's own text fields read the whole clipboard every time it changes,
+  which would let another program stall the shell while the page is open.
 - `shell.json` holds the symbols in your bar and watchlist, never quantities.
   If you keep `~/.config` in a dotfiles repository, that file goes with it.
   The holdings file is under `~/.local/share` so it does not.
@@ -212,8 +215,9 @@ npm run check
 (`tsc --checkJs` over `lib/`), a load check that imports every `lib/` module in
 Qt's real JavaScript engine (QJSEngine, which is stricter than Node), an I/O
 check that runs the file writer and the curl fetcher in a headless Quickshell,
-and `omarchy plugin validate .`. Everything after the type check needs Omarchy
-installed, and the I/O check also needs python3.
+a field check that loads the settings page the same way and confirms it holds
+no Qt text input, and `omarchy plugin validate .`. Everything after the type
+check needs Omarchy installed, and the I/O check also needs python3.
 
 The logic is in `lib/*.mjs`: plain modules with no network, file or Qt access,
 tested in Node against recorded responses in `tests/fixtures`. The QML files
