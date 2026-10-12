@@ -210,9 +210,10 @@ FocusScope {
     }
   }
 
-  // Whole seconds with a floor. The stepper stops at `min`; a lower typed
-  // value is raised to it when the field loses the keyboard, and `committed`
-  // says whether that happened.
+  // Whole seconds from `min` to `max`. The ▴▾ stepper and the arrow keys save at
+  // once; a typed value is saved when the field loses the keyboard, raised to
+  // `min` or lowered to `max` when outside them, and `committed` says whether
+  // it was raised. Esc puts the stored value back.
   component SecondsField: Row {
     id: seconds
     property int min: 1
@@ -222,56 +223,87 @@ FocusScope {
 
     spacing: Style.space(6)
 
-    // What was last typed, since the spin box rewrites its own text on blur.
-    property string typed: ""
+    function shown() { return Number(current).toLocaleString(Qt.locale(), "f", 0) }
 
+    // Whether typing has changed the text since the stored value was shown.
+    property bool edited: false
+
+    function show() {
+      field.text = shown()
+      edited = false
+    }
+
+    onCurrentChanged: if (!edited) show()
+    Component.onCompleted: show()
+
+    // Saves what was typed, if anything, and shows the stored value.
     function finish() {
-      var typedText = typed
-      typed = ""
-      var result = typedText === "" ? null : PageLib.snapSeconds(typedText, min)
-      if (result) committed(result.seconds, result.snapped)
-      // Typing (and the spin box's own handling of it) breaks the bindings that
-      // show the stored value; put them back once the spin box is done.
-      Qt.callLater(function() {
-        number.field.value = Qt.binding(function() { return number.value })
-        number.field.contentItem.text = Qt.binding(function() { return number.field.displayText })
-      })
+      var typed = edited ? PageLib.snapSeconds(field.text, min, max) : null
+      show()
+      if (typed) committed(typed.seconds, typed.snapped)
     }
 
-    // Esc: drop what was typed and hand the keyboard back. The spin box still
-    // applies its text as it loses focus; that change is not saved, and
-    // finish() then shows the stored value again.
-    property bool reverting: false
-
-    function revert() {
-      typed = ""
-      reverting = true
-      page.unfocus()
-      reverting = false
+    // One step from the typed value, or from the stored one when nothing
+    // valid was typed.
+    function stepBy(delta) {
+      var typed = edited ? PageLib.snapSeconds(field.text, min, max) : null
+      var next = Math.max(min, Math.min(max, (typed ? typed.seconds : current) + delta))
+      show()
+      if (next !== current) committed(next, false)
     }
 
-    NumberField {
-      id: number
+    KeyField {
+      id: field
       anchors.verticalCenter: parent.verticalCenter
-      from: seconds.min
-      to: seconds.max
-      value: seconds.current
-      fieldWidth: Style.space(72)
+      width: Style.space(72)
+      allowed: /[0-9,]/
       foreground: page.fg
-      fontFamily: page.fontFamily
-      // Stepper and arrow keys.
-      onModified: function(v) { if (seconds.typed === "" && !seconds.reverting) seconds.committed(v, false) }
-      Keys.onEscapePressed: seconds.revert()
-    }
+      font.family: page.fontFamily
+      font.pixelSize: Style.font.body
+      horizontalAlignment: Text.AlignRight
+      // As tall as the dropdowns in the neighbouring rows.
+      verticalPadding: Style.space(5)
+      rightPadding: horizontalPadding + Border.right(borderSpec) + stepper.width + Style.space(4)
+      onTextEdited: seconds.edited = true
+      onEditingFinished: seconds.finish()
 
-    Connections {
-      target: number.field.contentItem
-      function onTextEdited() { seconds.typed = number.field.contentItem.text }
-    }
+      Keys.onUpPressed: seconds.stepBy(1)
+      Keys.onDownPressed: seconds.stepBy(-1)
+      Keys.onEscapePressed: {
+        seconds.show()
+        page.unfocus()
+      }
 
-    Connections {
-      target: number.field
-      function onActiveFocusChanged() { if (!number.field.activeFocus) seconds.finish() }
+      Column {
+        id: stepper
+        anchors.right: parent.right
+        anchors.rightMargin: field.horizontalPadding + Border.right(field.borderSpec) - Style.space(2)
+        anchors.verticalCenter: parent.verticalCenter
+
+        Repeater {
+          model: [{ glyph: "▴", delta: 1 }, { glyph: "▾", delta: -1 }]
+
+          Text {
+            required property var modelData
+            textFormat: Text.PlainText
+            text: modelData.glyph
+            color: arrowMouse.containsMouse ? page.fg : page.dim
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.caption
+            height: Style.space(9)
+            verticalAlignment: Text.AlignVCenter
+
+            MouseArea {
+              id: arrowMouse
+              anchors.fill: parent
+              anchors.margins: -Style.space(2)
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: seconds.stepBy(parent.modelData.delta)
+            }
+          }
+        }
+      }
     }
 
     Text {
@@ -294,7 +326,7 @@ FocusScope {
   // under an edit (a removal, a reorder of the file). The edit belongs to the
   // holding the field had when it took the keyboard: `commit` hands back that
   // identity ({asset, costCurrency}), and the page saves into it or nowhere.
-  component AmountField: TextField {
+  component AmountField: KeyField {
     id: amount
     property var holding: null
     property real current: 0
@@ -325,14 +357,15 @@ FocusScope {
     }
 
     readOnly: page.locked
+    allowed: /[0-9.,]/
     foreground: page.fg
     font.family: page.fontFamily
     font.pixelSize: Style.font.body
-    horizontalAlignment: TextInput.AlignRight
+    horizontalAlignment: Text.AlignRight
     verticalPadding: Style.space(3)
     horizontalPadding: Style.space(6)
-    leftPadding: horizontalPadding + Border.left(_borderSpec) + (prefixText.visible ? prefixText.implicitWidth + Style.space(2) : 0)
-    rightPadding: horizontalPadding + Border.right(_borderSpec) + (chevron.visible ? chevron.implicitWidth + Style.space(4) : 0)
+    leftPadding: horizontalPadding + Border.left(borderSpec) + (prefixText.visible ? prefixText.implicitWidth + Style.space(2) : 0)
+    rightPadding: horizontalPadding + Border.right(borderSpec) + (chevron.visible ? chevron.implicitWidth + Style.space(4) : 0)
     text: stored()
     // Typing breaks the `text` binding; a value saved from elsewhere is
     // pushed in by hand unless the user is mid-edit.
@@ -356,7 +389,7 @@ FocusScope {
       id: prefixText
       visible: amount.prefix !== ""
       anchors.left: parent.left
-      anchors.leftMargin: amount.horizontalPadding + Border.left(amount._borderSpec)
+      anchors.leftMargin: amount.horizontalPadding + Border.left(amount.borderSpec)
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
       text: amount.prefix
@@ -368,7 +401,7 @@ FocusScope {
       id: chevron
       visible: amount.menu
       anchors.right: parent.right
-      anchors.rightMargin: amount.horizontalPadding + Border.right(amount._borderSpec)
+      anchors.rightMargin: amount.horizontalPadding + Border.right(amount.borderSpec)
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
       text: "▾"
@@ -440,7 +473,7 @@ FocusScope {
 
     onResultsChanged: cursor = Math.min(cursor, Math.max(0, results.length - 1))
 
-    TextField {
+    KeyField {
       id: input
       width: parent.width
       placeholderText: box.placeholderText

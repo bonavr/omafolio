@@ -66,17 +66,17 @@ test("parseAmount refuses what is not a plain number", () => {
 });
 
 test("snapSeconds boundary: 59 raised and flagged, 60 and 61 kept", () => {
-  assert.deepEqual(snapSeconds("59", 60), { seconds: 60, snapped: true });
-  assert.deepEqual(snapSeconds("60", 60), { seconds: 60, snapped: false });
-  assert.deepEqual(snapSeconds("61", 60), { seconds: 61, snapped: false });
-  assert.deepEqual(snapSeconds("30", 60), { seconds: 60, snapped: true });
-  assert.deepEqual(snapSeconds("1", 2), { seconds: 2, snapped: true });
-  assert.deepEqual(snapSeconds("2", 2), { seconds: 2, snapped: false });
+  assert.deepEqual(snapSeconds("59", 60, 86400), { seconds: 60, snapped: true });
+  assert.deepEqual(snapSeconds("60", 60, 86400), { seconds: 60, snapped: false });
+  assert.deepEqual(snapSeconds("61", 60, 86400), { seconds: 61, snapped: false });
+  assert.deepEqual(snapSeconds("30", 60, 86400), { seconds: 60, snapped: true });
+  assert.deepEqual(snapSeconds("1", 2, 86400), { seconds: 2, snapped: true });
+  assert.deepEqual(snapSeconds("2", 2, 86400), { seconds: 2, snapped: false });
 });
 
 test("snapSeconds accepts space and separators, refuses fractions and junk", () => {
-  assert.deepEqual(snapSeconds(" 1,200 ", 60), { seconds: 1200, snapped: false });
-  for (const bad of ["", "abc", "60.5", "-5", "1e2", "9".repeat(20)]) assert.equal(snapSeconds(bad, 60), null, bad);
+  assert.deepEqual(snapSeconds(" 1,200 ", 60, 86400), { seconds: 1200, snapped: false });
+  for (const bad of ["", "abc", "60.5", "-5", "1e2", "9".repeat(20)]) assert.equal(snapSeconds(bad, 60, 86400), null, bad);
 });
 
 test("settingsEntry puts id first, keeps other keys and applies the patch", () => {
@@ -140,8 +140,16 @@ test("parseAmount accepts thousands groups of exactly three, as formatQuantity w
   assert.equal(parseAmount("1,000"), 1000);
 });
 
+test("snapSeconds lowers a value above max to max without flagging it", () => {
+  assert.deepEqual(snapSeconds("3599", 2, 3600), { seconds: 3599, snapped: false });
+  assert.deepEqual(snapSeconds("3600", 2, 3600), { seconds: 3600, snapped: false });
+  assert.deepEqual(snapSeconds("3601", 2, 3600), { seconds: 3600, snapped: false });
+  assert.deepEqual(snapSeconds("99999999999", 60, 86400), { seconds: 86400, snapped: false });
+  assert.deepEqual(snapSeconds("100000", 2), { seconds: 100000, snapped: false });
+});
+
 test("snapSeconds refuses misplaced separators", () => {
-  assert.equal(snapSeconds("1,20", 60), null);
-  assert.equal(snapSeconds("1,2,0", 60), null);
-  assert.deepEqual(snapSeconds("1,200", 60), { seconds: 1200, snapped: false });
+  assert.equal(snapSeconds("1,20", 60, 86400), null);
+  assert.equal(snapSeconds("1,2,0", 60, 86400), null);
+  assert.deepEqual(snapSeconds("1,200", 60, 86400), { seconds: 1200, snapped: false });
 });
