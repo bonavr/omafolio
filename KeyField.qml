@@ -7,7 +7,7 @@ import "lib/keyfield.mjs" as Line
 // TextField. Qt's editable TextInput (inside TextField, SpinBox and the shell's
 // NumberField) reads the whole clipboard every time it changes, with no size
 // limit or deadline, so another program could stall the shell through any
-// field on screen. This one never touches the clipboard and offers no paste.
+// such field that exists, shown or not. This one never touches the clipboard and offers no paste.
 //
 // lib/keyfield.mjs decides what each key does. Keys it leaves alone (Enter,
 // Esc, Tab, Up, Down) reach this item's own Keys handlers, then its parents.
@@ -106,18 +106,20 @@ FocusScope {
 
     readonly property real textWidth: metrics.advanceWidth(field.text)
     readonly property real cursorX: metrics.advanceWidth(field.text.slice(0, field.cursor))
+    // The width text may use: the last pixel is kept for the cursor after it.
+    readonly property real room: width - 1
     // How far overflowing text is scrolled left so the cursor shows.
     property real scroll: 0
-    readonly property real textX: textWidth > width ? -scroll
-      : field.horizontalAlignment === Text.AlignRight ? width - textWidth
-      : field.horizontalAlignment === Text.AlignHCenter ? (width - textWidth) / 2
+    readonly property real textX: textWidth > room ? -scroll
+      : field.horizontalAlignment === Text.AlignRight ? room - textWidth
+      : field.horizontalAlignment === Text.AlignHCenter ? (room - textWidth) / 2
       : 0
 
     function follow() {
-      if (textWidth <= width) { scroll = 0; return }
-      var s = Math.min(scroll, textWidth - width + 1)
+      if (textWidth <= room) { scroll = 0; return }
+      var s = Math.min(scroll, textWidth - room)
       if (cursorX < s) s = cursorX
-      else if (cursorX > s + width - 1) s = cursorX - width + 1
+      else if (cursorX > s + room) s = cursorX - room
       scroll = Math.max(0, s)
     }
     onCursorXChanged: follow()

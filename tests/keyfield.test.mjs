@@ -18,6 +18,7 @@ test("typing inserts at the cursor, at either end or in the middle", () => {
   assert.deepEqual(type(at("OO", 0), "V"), at("VOO", 1));
   assert.deepEqual(type(at("12", 1), "5"), at("152", 2));
   assert.deepEqual(type(at("", 0), "é"), at("é", 1));
+  assert.deepEqual(type(at("apple", 5), " "), at("apple ", 6));
 });
 
 test("typing with everything selected replaces it", () => {

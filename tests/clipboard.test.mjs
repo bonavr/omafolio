@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const INPUTS = ["TextInput", "TextEdit", "TextField", "TextArea", "SpinBox", "ComboBox", "NumberField",
+  "SearchField",
   "SearchableDropdown", "MultiSelect"];
 // An element (`TextField {`, `QQC.TextField {`) or an inline component built on one.
 const ELEMENT = new RegExp(`(?:^|[\\s.:])(?:${INPUTS.join("|")})\\s*\\{`);

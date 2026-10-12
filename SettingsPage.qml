@@ -210,10 +210,10 @@ FocusScope {
     }
   }
 
-  // Whole seconds with a floor. The ▴▾ stepper and the arrow keys stay within
-  // `min` and `max` and save at once; a lower typed value is raised to `min`
-  // when the field loses the keyboard, and `committed` says whether that
-  // happened. Esc puts the stored value back.
+  // Whole seconds from `min` to `max`. The ▴▾ stepper and the arrow keys save at
+  // once; a typed value is saved when the field loses the keyboard, raised to
+  // `min` or lowered to `max` when outside them, and `committed` says whether
+  // it was raised. Esc puts the stored value back.
   component SecondsField: Row {
     id: seconds
     property int min: 1
@@ -238,7 +238,7 @@ FocusScope {
 
     // Saves what was typed, if anything, and shows the stored value.
     function finish() {
-      var typed = edited ? PageLib.snapSeconds(field.text, min) : null
+      var typed = edited ? PageLib.snapSeconds(field.text, min, max) : null
       show()
       if (typed) committed(typed.seconds, typed.snapped)
     }
@@ -246,7 +246,7 @@ FocusScope {
     // One step from the typed value, or from the stored one when nothing
     // valid was typed.
     function stepBy(delta) {
-      var typed = edited ? PageLib.snapSeconds(field.text, min) : null
+      var typed = edited ? PageLib.snapSeconds(field.text, min, max) : null
       var next = Math.max(min, Math.min(max, (typed ? typed.seconds : current) + delta))
       show()
       if (next !== current) committed(next, false)
@@ -261,6 +261,8 @@ FocusScope {
       font.family: page.fontFamily
       font.pixelSize: Style.font.body
       horizontalAlignment: Text.AlignRight
+      // As tall as the dropdowns in the neighbouring rows.
+      verticalPadding: Style.space(5)
       rightPadding: horizontalPadding + Border.right(borderSpec) + stepper.width + Style.space(4)
       onTextEdited: seconds.edited = true
       onEditingFinished: seconds.finish()
