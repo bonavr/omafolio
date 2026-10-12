@@ -126,21 +126,21 @@ test("portfolio with nothing valued: dash once every provider has been tried, el
 const usdaud = { "USDAUD=X": q("USDAUD=X", "USDAUD=X", 1.5, 1.5, "yahoo", { currency: "AUD", kind: "fx" }) };
 
 test("displayPrice with native prices on: the price in its own currency, FX or not", () => {
-  assert.deepEqual(displayPrice(82699, "USD", "AUD", usdaud, true), { amount: 82699, currency: "USD" });
-  assert.deepEqual(displayPrice(82699, "USD", "AUD", {}, true), { amount: 82699, currency: "USD" });
-  assert.deepEqual(displayPrice(82699, "USD", "USD", {}, true), { amount: 82699, currency: "USD" });
+  assert.deepEqual(displayPrice(82699, "USD", "AUD", usdaud, true), { amount: 82699, currency: "USD", via: null });
+  assert.deepEqual(displayPrice(82699, "USD", "AUD", {}, true), { amount: 82699, currency: "USD", via: null });
+  assert.deepEqual(displayPrice(82699, "USD", "USD", {}, true), { amount: 82699, currency: "USD", via: null });
 });
 
 test("displayPrice with native prices off: converted to the base currency at the current rate", () => {
-  assert.deepEqual(displayPrice(100, "USD", "AUD", usdaud, false), { amount: 150, currency: "AUD" });
+  assert.deepEqual(displayPrice(100, "USD", "AUD", usdaud, false), { amount: 150, currency: "AUD", via: "USDAUD=X" });
   // Already in the base currency: unchanged, no rate needed.
-  assert.deepEqual(displayPrice(100, "AUD", "AUD", {}, false), { amount: 100, currency: "AUD" });
+  assert.deepEqual(displayPrice(100, "AUD", "AUD", {}, false), { amount: 100, currency: "AUD", via: null });
 });
 
 test("displayPrice with native prices off and no rate falls back to the native price", () => {
-  assert.deepEqual(displayPrice(100, "USD", "AUD", {}, false), { amount: 100, currency: "USD" });
+  assert.deepEqual(displayPrice(100, "USD", "AUD", {}, false), { amount: 100, currency: "USD", via: null });
   // A rate for another pair does not help.
-  assert.deepEqual(displayPrice(100, "EUR", "AUD", usdaud, false), { amount: 100, currency: "EUR" });
+  assert.deepEqual(displayPrice(100, "EUR", "AUD", usdaud, false), { amount: 100, currency: "EUR", via: null });
 });
 
 test("bar asset frame, native prices on: own currency with its prefix when it is not the base", () => {
@@ -160,6 +160,30 @@ test("bar asset frame, native prices off: converted to the base and plain; nativ
   const noRate = data({ baseCurrency: "AUD", nativePrices: false });
   assert.deepEqual([barFrame("crypto:bitcoin", noRate).value, barFrame("crypto:bitcoin", noRate).change], ["US$118,066", "▲ 1.4%"]);
   assert.equal(barFrame("VOO", data({ baseCurrency: "USD", nativePrices: false })).value, "715.59");
+});
+
+test("a price converted at a stale rate is stale and names the rate; native prices do not care", () => {
+  const failing = { failures: 3, failingSince: FAIL_1402, lastSuccess: null };
+  const staleRate = (over) => data(Object.assign({
+    baseCurrency: "AUD", nativePrices: false, quotes: Object.assign({}, quotes, usdaud),
+    states: { VOO: "live", "crypto:bitcoin": "live", "USDAUD=X": "stale" },
+    providerHealth: { yahoo: failing, coingecko: healthy },
+  }, over));
+  const btc = barFrame("crypto:bitcoin", staleRate());
+  assert.deepEqual([btc.value, btc.state, btc.warn], ["177,099", "stale", true]);
+  assert.equal(btc.tooltip, "Includes 1 stale price: USDAUD=X as of Fri 16:00 (Yahoo unavailable since 14:02)");
+  // Both stale: both named.
+  const both = barFrame("VOO", staleRate({ states: { VOO: "stale", "USDAUD=X": "stale" } }));
+  assert.deepEqual([both.state, both.tooltip.startsWith("Includes 2 stale prices: VOO as of")], ["stale", true]);
+  // A closed asset stays closed but still warns about the rate.
+  const closed = barFrame("VOO", staleRate({ states: { VOO: "closed", "USDAUD=X": "stale" } }));
+  assert.deepEqual([closed.state, closed.warn], ["closed", true]);
+  // Shown as quoted, the rate is not used and does not matter.
+  const native = barFrame("crypto:bitcoin", staleRate({ nativePrices: true }));
+  assert.deepEqual([native.value, native.state, native.warn, native.tooltip], ["US$118,066", "live", false, ""]);
+  // A live rate leaves a live price alone.
+  const fine = barFrame("crypto:bitcoin", staleRate({ states: { "crypto:bitcoin": "live", "USDAUD=X": "live" } }));
+  assert.deepEqual([fine.state, fine.warn, fine.tooltip], ["live", false, ""]);
 });
 
 test("portfolio frame stays plain in the base currency whatever nativePrices says", () => {

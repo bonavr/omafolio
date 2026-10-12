@@ -265,7 +265,7 @@ QtObject {
   // Merges a provider's answer to `requested` (AssetRef[]); requested assets
   // that still have no quote at all are marked not found until one arrives.
   function acceptQuotes(requested, fresh) {
-    quotes = Market.mergeQuotes(quotes, fresh)
+    quotes = Market.mergeQuotes(quotes, fresh, Date.now())
     var missing = Market.notFound(requested, quotes)
     var next = Object.assign({}, notFoundAssets)
     for (const asset of requested) {

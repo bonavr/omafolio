@@ -113,15 +113,48 @@ test("backoff boundary: 0 vs 1 failures, and applies when market closed", () => 
   assert.equal(nextDelayMs("yahoo", {}, undefined, 60, T0), 60000);
 });
 
+test("an open price its provider keeps answering without goes stale after 3 minutes", () => {
+  const received = { ...q("crypto:bitcoin", "USD", "crypto"), receivedAt: T0 };
+  const answeredAt = (t) => ({ failures: 0, failingSince: null, lastSuccess: t, lastFailure: null });
+  assert.equal(priceState(received, answeredAt(T0), T0), "live");
+  assert.equal(priceState(received, answeredAt(T0 + 180000), T0 + 180000), "live");
+  assert.equal(priceState(received, answeredAt(T0 + 180001), T0 + 180001), "stale");
+  // Time alone does not make it stale: only answers that leave it out do.
+  assert.equal(priceState(received, answeredAt(T0), T0 + 24 * H), "live");
+  // A quote with no receipt time (a cached one) is judged as before.
+  assert.equal(priceState(q("crypto:bitcoin", "USD", "crypto"), answeredAt(T0 + 24 * H), T0 + 24 * H), "live");
+});
+test("a left-out quote is stale even after the session it arrived with has ended", () => {
+  const voo = { ...q("VOO", "USD", "etf", open), receivedAt: T0 + H };
+  const answeredAt = (t) => ({ failures: 0, failingSince: null, lastSuccess: t, lastFailure: null });
+  // Still arriving with each closed-market poll: closed.
+  assert.equal(priceState({ ...voo, receivedAt: T0 + 8 * H }, answeredAt(T0 + 8 * H), T0 + 8 * H), "closed");
+  // Left out since mid-session: stale during the session, after it, and on the next day.
+  assert.equal(priceState(voo, answeredAt(T0 + 2 * H), T0 + 2 * H), "stale");
+  assert.equal(priceState(voo, answeredAt(T0 + 8 * H), T0 + 8 * H), "stale");
+  assert.equal(priceState(voo, answeredAt(T0 + 25 * H), T0 + 25 * H), "stale");
+});
+test("a sibling's fresh quote does not refresh an omitted one", () => {
+  const btc = q("crypto:bitcoin", "USD", "crypto");
+  const eth = q("crypto:ethereum", "USD", "crypto");
+  const first = mergeQuotes({}, [btc, eth], T0);
+  const later = mergeQuotes(first, [eth], T0 + 24 * H);
+  assert.equal(later["crypto:bitcoin"].receivedAt, T0);
+  assert.equal(later["crypto:ethereum"].receivedAt, T0 + 24 * H);
+  const health = recordSuccess(undefined, T0 + 24 * H);
+  assert.equal(priceState(later["crypto:bitcoin"], health, T0 + 24 * H), "stale");
+  assert.equal(priceState(later["crypto:ethereum"], health, T0 + 24 * H), "live");
+});
+
 test("last good quote survives and fresh replaces", () => {
-  const m = mergeQuotes({ VOO: q("VOO", "USD"), AAPL: q("AAPL", "USD") }, [{ ...q("VOO", "USD"), price: 2 }]);
+  const m = mergeQuotes({ VOO: q("VOO", "USD"), AAPL: q("AAPL", "USD") }, [{ ...q("VOO", "USD"), price: 2 }], T0);
   assert.equal(m.VOO.price, 2);
   assert.ok(m.AAPL);
   assert.equal(m.VOO.fromCache, undefined);
 });
 test("mergeQuotes does not mutate previous and drops fromCache of replaced quote", () => {
   const previous = { VOO: { ...q("VOO", "USD"), fromCache: true } };
-  const m = mergeQuotes(previous, [{ ...q("VOO", "USD"), price: 3 }]);
+  const m = mergeQuotes(previous, [{ ...q("VOO", "USD"), price: 3 }], T0);
   assert.notEqual(m, previous);
   assert.equal(previous.VOO.price, 1);
   assert.equal(previous.VOO.fromCache, true);
@@ -131,7 +164,7 @@ test("mergeQuotes does not mutate previous and drops fromCache of replaced quote
 test("notFound: only requested assets with no quote at all, fresh or cached", () => {
   assert.deepEqual(notFound(["VOO", "VOOO"], { VOO: q("VOO", "USD") }), ["VOOO"]);
   // A response that omits an asset with a last good (or cached) quote leaves it priced.
-  const held = mergeQuotes({ AAPL: q("AAPL", "USD"), MSFT: { ...q("MSFT", "USD"), fromCache: true } }, [q("VOO", "USD")]);
+  const held = mergeQuotes({ AAPL: q("AAPL", "USD"), MSFT: { ...q("MSFT", "USD"), fromCache: true } }, [q("VOO", "USD")], T0);
   assert.deepEqual(notFound(["VOO", "AAPL", "MSFT", "VOOO"], held), ["VOOO"]);
   assert.deepEqual(notFound([], held), []);
   assert.deepEqual(notFound(["VOO"], {}), ["VOO"]);

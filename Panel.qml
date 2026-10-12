@@ -13,7 +13,7 @@ import "lib/panel.mjs" as PanelLib
 // `range` setting) drives the chart and the row sparklines; history is asked of
 // MarketService while the panel is open. The gear opens the settings page.
 //
-// Owns only view state (tab, selected asset, range). What each line says comes
+// Owns only view state (tab, selected row, range). What each line says comes
 // from lib/panel.mjs; prices, history and health from the shared MarketService.
 Panel {
   id: root
@@ -88,7 +88,8 @@ Panel {
 
   // "portfolio" or "watchlist".
   property string tab: "portfolio"
-  // Asset shown in the hero instead of the tab's overview; "" for the overview.
+  // Key (PanelRow.key) of the row shown in the hero instead of the tab's
+  // overview; "" for the overview.
   property string selected: ""
   property string range: "1M"
   // Set by the gear. The settings page (SettingsPage.qml) replaces the body
@@ -116,8 +117,8 @@ Panel {
     selected = ""
   }
 
-  function select(asset) {
-    selected = selected === asset ? "" : asset
+  function select(key) {
+    selected = selected === key ? "" : key
   }
 
   // Esc: settings page, then position view, then the panel.
@@ -137,11 +138,11 @@ Panel {
     if (rows.length === 0) return
     var at = indexOf(selected)
     var next = at < 0 ? (dy > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, at + dy))
-    selected = rows[next].asset
+    selected = rows[next].key
   }
 
-  function indexOf(asset) {
-    for (var i = 0; i < rows.length; i++) if (rows[i].asset === asset) return i
+  function indexOf(key) {
+    for (var i = 0; i < rows.length; i++) if (rows[i].key === key) return i
     return -1
   }
 
@@ -161,15 +162,16 @@ Panel {
 
   readonly property bool portfolioTab: tab === "portfolio"
   readonly property var rows: !panelData ? [] : (portfolioTab ? PanelLib.portfolioRows(panelData) : PanelLib.watchRows(panelData))
-  // The selected asset, while it is still in the list.
-  readonly property string shownAsset: selected !== "" && indexOf(selected) >= 0 ? selected : ""
+  // The selected row, while it is still in the list, and its asset.
+  readonly property var shownRow: selected !== "" && indexOf(selected) >= 0 ? rows[indexOf(selected)] : null
+  readonly property string shownAsset: shownRow ? shownRow.asset : ""
 
   // Cached history for everything on either tab; asking is what fetches it.
   readonly property var seriesByAsset: market && opened ? market.history(PanelLib.historyAssets(panelData, market.fx), range) : ({})
 
   readonly property var hero: {
     if (!panelData) return null
-    if (shownAsset !== "") return PanelLib.assetHero(shownAsset, panelData, portfolioTab)
+    if (shownRow) return PanelLib.assetHero(shownRow.asset, panelData, portfolioTab ? shownRow.key : null)
     return portfolioTab && panelData.holdings.length > 0 ? PanelLib.portfolioHero(panelData) : null
   }
   readonly property var chartSeries: {
@@ -630,7 +632,7 @@ Panel {
             Rectangle {
               id: row
               required property var modelData
-              readonly property bool current: modelData.asset === root.shownAsset
+              readonly property bool current: root.shownRow !== null && modelData.key === root.shownRow.key
               Layout.fillWidth: true
               Layout.leftMargin: -root.rowBleed
               Layout.rightMargin: -root.rowBleed
@@ -722,7 +724,7 @@ Panel {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.select(row.modelData.asset)
+                onClicked: root.select(row.modelData.key)
               }
 
               PanelToolTip {

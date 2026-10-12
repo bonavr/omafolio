@@ -98,3 +98,15 @@ test("a session's UTC offset is optional but must be a number", () => {
     assert.deepEqual(parseQuoteCache(cacheWith({ VOO: { ...voo(), session: { ...voo().session, utcOffsetSeconds } } })), {}, String(utcOffsetSeconds));
   }
 });
+
+test("receipt times are not written, so a new answer at the same price leaves the text unchanged", () => {
+  assert.equal(serializeQuoteCache({ VOO: { ...voo(), receivedAt: 1 } }), serializeQuoteCache({ VOO: { ...voo(), receivedAt: 2 } }));
+  assert.equal("receivedAt" in parseQuoteCache(serializeQuoteCache({ VOO: { ...voo(), receivedAt: 1 } })).VOO, false);
+});
+test("a file holding a receipt time is read when the time is valid and the entry dropped when it is not", () => {
+  const stamped = { ...voo(), receivedAt: 1791576000000 };
+  assert.deepEqual(parseQuoteCache(cacheWith({ VOO: stamped })), { VOO: { ...stamped, fromCache: true } });
+  for (const bad of ["1", null, Infinity]) {
+    assert.deepEqual(parseQuoteCache(cacheWith({ VOO: { ...voo(), receivedAt: bad } })), {}, String(bad));
+  }
+});

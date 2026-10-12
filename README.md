@@ -156,7 +156,9 @@ It holds symbols, prices and times, never quantities. It is safe to delete.
   endpoints. Crypto comes from CoinGecko's public API. Neither needs a key and
   neither is an official or supported feed for this use, so either may change,
   throttle or block requests. When that happens the affected prices go stale
-  and the panel names the provider and the time it stopped.
+  and the panel names the provider and the time it stopped. A price the
+  provider stops returning for more than 3 minutes, while still answering for
+  others, also goes stale and keeps its last value.
 - Free equity quotes can be delayed by the exchange. The position view shows
   the time of each quote.
 - US markets are the supported case. Other Yahoo symbols may work but are

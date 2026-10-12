@@ -134,7 +134,7 @@ freshness rules.
 |---|---|
 | live | Fresh, market open |
 | closed | Market shut; the last close is the right number |
-| stale | Should be updating, but its provider has failed for more than 3 minutes |
+| stale | Should be updating, but its provider has failed for more than 3 minutes, its provider has kept answering without it for more than 3 minutes, or it is from the cache |
 | missing | Never had a price (unknown or delisted symbol) |
 
 Open or closed comes from the trading session that Yahoo reports with each
@@ -263,6 +263,8 @@ from the active Omarchy theme.
   native price while no rate is known). Any amount not in the base currency
   carries its prefix outside the seven-character rule (`₿ US$82,699 ▲ 0.4%`
   with base AUD); the portfolio total is always in the base currency, plain.
+  A price converted at a stale rate is flagged stale like a stale price, and
+  its tooltip names the rate.
 
 ### Panel
 
@@ -278,7 +280,8 @@ from the active Omarchy theme.
   value, quantity × price, gain, its chart, average cost, weight in the
   portfolio and today's range) and highlights the row. `← Portfolio` or Esc
   goes back. On the Watchlist tab the same view shows without the holding
-  stats.
+  stats. An asset held in two cost currencies is two rows, each opening its
+  own position (its own quantity, average cost and gain).
 - **Currencies in the panel:** totals, values and gains are in the base
   currency. Watchlist rows and the watched hero show the price in the asset's
   own currency, or, with `nativePrices` off, converted to the base (the native
@@ -288,7 +291,8 @@ from the active Omarchy theme.
   is labelled `Day range · <prefix>` (`Day range · US$`) and the numbers stay
   bare, since the cell has no room for a prefix.
 - Stale and missing assets follow the price states above, with ⚠ tooltips on
-  the row and on the total.
+  the row and on the total. A Watchlist price converted at a stale rate warns
+  the same way.
 
 ### Settings page
 

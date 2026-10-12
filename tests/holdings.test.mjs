@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseHoldings, serializeHoldings, withHolding, withoutHolding, defaultCostCurrency, jsonErrorLine,
-  addHolding, editHolding,
+  addHolding, editHolding, holdingKey,
 } from "../lib/holdings.mjs";
 
 const SPEC_EXAMPLE = `{ "holdings": [
@@ -411,4 +411,12 @@ test("the edited row keeps its explicit listing currency rather than merge into 
   const edited = editHolding(picked, "VTI", "USD", { quantity: 11 }, "USD");
   assert.equal(edited[0], plain);
   assert.deepEqual(edited[1], { asset: "VTI", quantity: 11, cost: 300, costCurrency: "USD" });
+});
+
+test("holdingKey tells holdings apart exactly by (asset, costCurrency)", () => {
+  const key = holdingKey({ asset: "AAPL" });
+  assert.equal(holdingKey({ asset: "AAPL", quantity: 3, cost: 1 }), key);
+  assert.notEqual(holdingKey({ asset: "AAPL", costCurrency: "EUR" }), key);
+  assert.notEqual(holdingKey({ asset: "AAPL", costCurrency: "USD" }), key);
+  assert.notEqual(holdingKey({ asset: "MSFT" }), key);
 });

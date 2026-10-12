@@ -411,3 +411,15 @@ test("rangeChange pct is null when the first value is 0, numeric otherwise", () 
   assert.deepEqual(rangeChange({ asset: "p", currency: "AUD", points: [[0, 0], [1, 5]] }), { change: 5, pct: null });
   assert.deepEqual(rangeChange({ asset: "p", currency: "AUD", points: [[0, 1], [1, 5]] }), { change: 4, pct: 400 });
 });
+
+test("one asset held in two cost currencies: each position keeps its holding, and the asset is listed once", () => {
+  const two = [{ asset: "AAPL", quantity: 1, cost: 50 }, { asset: "AAPL", quantity: 10, cost: 20, costCurrency: "EUR" }];
+  const stale = valuePortfolio(two, quotes, Object.assign({}, allLive, { AAPL: "stale" }), "USD");
+  assert.deepEqual(stale.stale, ["AAPL"]);
+  // No EURUSD=X: the EUR-cost holding is left out, its sibling still valued.
+  assert.deepEqual(stale.excluded, ["AAPL"]);
+  assert.deepEqual(stale.positions.map((p) => [p.holding, p.value === null]), [[two[0], false], [two[1], true]]);
+  assert.notEqual(stale.positions[0].key, stale.positions[1].key);
+  const missing = valuePortfolio(two, {}, {}, "USD");
+  assert.deepEqual(missing.excluded, ["AAPL"]);
+});

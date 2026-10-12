@@ -5,6 +5,7 @@ import {
   portfolioSeries, seriesDirection, rangeLine, chartPoints, chartNote,
 } from "../lib/panel.mjs";
 import { valuePortfolio } from "../lib/portfolio.mjs";
+import { holdingKey } from "../lib/holdings.mjs";
 
 const SAT_1400 = new Date(2026, 9, 10, 14, 0).getTime();
 const SAT_0700 = new Date(2026, 9, 10, 7, 0).getTime();
@@ -39,6 +40,8 @@ const make = (over) => {
   if (!d.portfolio) d.portfolio = valuePortfolio(d.holdings, d.quotes, d.states, d.baseCurrency);
   return d;
 };
+// The key a Portfolio row carries for its holding (costCurrency undefined: the listing currency).
+const position = (asset, costCurrency) => holdingKey({ asset, costCurrency });
 const series = (asset, values, currency = "USD", t0 = 0, step = 60000) =>
   ({ asset, currency, points: values.map((v, i) => [t0 + i * step, v]) });
 
@@ -48,7 +51,7 @@ test("portfolio rows: label, base-currency value and day move, by value", () => 
   const rows = portfolioRows(make());
   assert.deepEqual(rows.map((r) => r.label), ["VOO", "VTSAX", "₿ BTC"]);
   assert.deepEqual(rows[0], {
-    asset: "VOO", label: "VOO", crypto: false, value: "$12,881", change: "▲ 0.6%", direction: "up", tooltip: "",
+    key: position("VOO"), asset: "VOO", label: "VOO", crypto: false, value: "$12,881", change: "▲ 0.6%", direction: "up", tooltip: "",
   });
   assert.equal(rows[2].crypto, true);
   // 0.05 × US$78,000 × 1.5: crypto is valued through the same exchange rate as US stocks.
@@ -82,7 +85,7 @@ test("portfolio row left out of the total: not found, outage, no rate, still loa
 test("watch rows: price in the asset's currency, not found, outage, loading, stale", () => {
   const states = Object.assign({ "crypto:ethereum": "missing" }, closedStates);
   const [nvda, eth] = watchRows(make({ states }));
-  assert.deepEqual(nvda, { asset: "NVDA", label: "NVDA", crypto: false, value: "US$190.50", change: "▼ 0.8%", direction: "down", tooltip: "" });
+  assert.deepEqual(nvda, { key: "NVDA", asset: "NVDA", label: "NVDA", crypto: false, value: "US$190.50", change: "▼ 0.8%", direction: "down", tooltip: "" });
   assert.deepEqual([eth.label, eth.crypto, eth.value, eth.change, eth.tooltip], ["ethereum", true, "not found", "", "ethereum not found"]);
 
   const down = watchRows(make({ states, providerHealth: { yahoo: healthy, coingecko: failing } }))[1];
@@ -123,19 +126,19 @@ test("watch rows with native prices off: converted to the base, native with pref
 });
 
 test("watchlist hero follows its row: native when on, base when off, the day range in the same currency", () => {
-  const on = assetHero("crypto:bitcoin", make(), false);
+  const on = assetHero("crypto:bitcoin", make(), null);
   assert.deepEqual([on.value, on.change, on.details], ["US$78,000", "▲ 1.3%", [{ label: "Day range · US$", value: "76,500–78,200" }]]);
-  const off = assetHero("crypto:bitcoin", make({ nativePrices: false }), false);
+  const off = assetHero("crypto:bitcoin", make({ nativePrices: false }), null);
   assert.deepEqual([off.value, off.change, off.details], ["$117,000", "▲ 1.3%", [{ label: "Day range", value: "114.8k–117.3k" }]]);
   const noRate = Object.assign({}, quotes);
   delete noRate["USDAUD=X"];
-  const fallback = assetHero("crypto:bitcoin", make({ quotes: noRate, nativePrices: false }), false);
+  const fallback = assetHero("crypto:bitcoin", make({ quotes: noRate, nativePrices: false }), null);
   assert.deepEqual([fallback.value, fallback.details[0]], ["US$78,000", { label: "Day range · US$", value: "76,500–78,200" }]);
 });
 
 test("position hero keeps its base value and native quantity × price whatever nativePrices says", () => {
   for (const nativePrices of [true, false]) {
-    const h = assetHero("crypto:bitcoin", make({ nativePrices }), true);
+    const h = assetHero("crypto:bitcoin", make({ nativePrices }), position("crypto:bitcoin", "AUD"));
     assert.deepEqual([h.value, h.subLabel, h.details[2]], ["$5,850", "0.05 × US$78,000", { label: "Day range · US$", value: "76,500–78,200" }], String(nativePrices));
     assert.equal(portfolioRows(make({ nativePrices }))[2].value, "$5,850");
   }
@@ -167,7 +170,7 @@ test("portfolio hero tooltip is the bar's", () => {
 });
 
 test("position hero: value, quantity × price, gain, avg cost, weight, day range, as of", () => {
-  const h = assetHero("VOO", make(), true);
+  const h = assetHero("VOO", make(), position("VOO"));
   assert.equal(h.title, "VOO · Vanguard S&P 500 ETF");
   assert.equal(h.value, "$12,881");
   assert.deepEqual([h.change, h.direction], ["▲ 0.6%", "up"]);
@@ -183,16 +186,16 @@ test("position hero: value, quantity × price, gain, avg cost, weight, day range
 });
 
 test("position hero: cost currency, weight below 10%, no day range, earlier day", () => {
-  const btc = assetHero("crypto:bitcoin", make(), true);
+  const btc = assetHero("crypto:bitcoin", make(), position("crypto:bitcoin", "AUD"));
   assert.equal(btc.details[0].value, "$61,000");
   assert.equal(btc.subLabel, "0.05 × US$78,000");
   assert.equal(btc.value, "$5,850");
-  const vtsax = assetHero("VTSAX", make(), true);
+  const vtsax = assetHero("VTSAX", make(), position("VTSAX"));
   assert.equal(vtsax.details[2].value, "—");
   const small = make({ holdings: holdings.map((h) => (h.asset === "VTSAX" ? Object.assign({}, h, { quantity: 1 }) : h)) });
-  assert.equal(assetHero("VTSAX", small, true).details[1].value, "1.5%");
+  assert.equal(assetHero("VTSAX", small, position("VTSAX")).details[1].value, "1.5%");
   const yesterday = make({ quotes: Object.assign({}, quotes, { VOO: Object.assign({}, quotes.VOO, { asOf: FRI_1600 }) }) });
-  assert.equal(assetHero("VOO", yesterday, true).asOf, "as of Fri 16:00");
+  assert.equal(assetHero("VOO", yesterday, position("VOO")).asOf, "as of Fri 16:00");
 });
 
 test("weight boundary: 9.95% shows one decimal, 10% and up are whole", () => {
@@ -201,7 +204,7 @@ test("weight boundary: 9.95% shows one decimal, 10% and up are whole", () => {
     d.portfolio = Object.assign({}, d.portfolio, {
       positions: d.portfolio.positions.map((p) => (p.asset === "VOO" ? Object.assign({}, p, { weight }) : p)),
     });
-    return assetHero("VOO", d, true).details[1].value;
+    return assetHero("VOO", d, position("VOO")).details[1].value;
   };
   assert.equal(view(9.94), "9.9%");
   assert.equal(view(10), "10%");
@@ -210,25 +213,25 @@ test("weight boundary: 9.95% shows one decimal, 10% and up are whole", () => {
 
 test("position hero for a holding left out of the total", () => {
   const extra = holdings.concat([{ asset: "VOOO", quantity: 1, cost: 1 }]);
-  const h = assetHero("VOOO", make({ holdings: extra, states: Object.assign({ VOOO: "missing" }, closedStates) }), true);
+  const h = assetHero("VOOO", make({ holdings: extra, states: Object.assign({ VOOO: "missing" }, closedStates) }), position("VOOO"));
   assert.deepEqual([h.title, h.value, h.change, h.subLabel, h.sub, h.asOf], ["VOOO", "not found", "", "", "", ""]);
   assert.deepEqual(h.details.map((d) => d.value), ["—", "—", "—"]);
   assert.equal(h.tooltip, "VOOO not found, not included");
 });
 
 test("watchlist hero has no holding stats, even for an asset that is held", () => {
-  const h = assetHero("VOO", make(), false);
+  const h = assetHero("VOO", make(), null);
   assert.equal(h.value, "US$715.59");
   assert.deepEqual([h.change, h.subLabel, h.sub], ["▲ 0.6%", "", ""]);
   assert.deepEqual(h.details, [{ label: "Day range · US$", value: "712.54–716.43" }]);
   assert.equal(h.asOf, "as of 07:00");
-  const nvda = assetHero("NVDA", make(), false);
+  const nvda = assetHero("NVDA", make(), null);
   assert.equal(nvda.title, "NVDA · NVIDIA Corporation");
 });
 
 test("title is just the symbol when the name adds nothing", () => {
   const plain = Object.assign({}, quotes, { NVDA: Object.assign({}, quotes.NVDA, { name: "NVDA" }) });
-  assert.equal(assetHero("NVDA", make({ quotes: plain }), false).title, "NVDA");
+  assert.equal(assetHero("NVDA", make({ quotes: plain }), null).title, "NVDA");
 });
 
 // ---- Status line
@@ -350,4 +353,62 @@ test("chart note names the failing provider whose history is missing", () => {
   // The position view only needs its own asset.
   assert.equal(chartNote(make({ providerHealth: cgDown }), {}, "VOO"), "No history yet");
   assert.equal(chartNote(make({ providerHealth: cgDown }), {}, "crypto:bitcoin"), "History unavailable (CoinGecko)");
+});
+
+// ---- One asset held in two cost currencies
+
+const twoAapl = (withEurRate) => {
+  const aapl = q("AAPL", "AAPL", "Apple Inc.", 100, 100, "USD", "stock", "yahoo");
+  const eurusd = q("EURUSD=X", "EURUSD=X", "EUR/USD", 2, 2, "USD", "fx", "yahoo");
+  const quotes2 = withEurRate ? { AAPL: aapl, "EURUSD=X": eurusd } : { AAPL: aapl };
+  return make({
+    quotes: quotes2,
+    states: { AAPL: "live", "EURUSD=X": "live" },
+    holdings: [{ asset: "AAPL", quantity: 1, cost: 50 }, { asset: "AAPL", quantity: 10, cost: 20, costCurrency: "EUR" }],
+    watch: [],
+    baseCurrency: "USD",
+  });
+};
+
+test("each holding of one asset is its own row, and its hero shows that holding's cost", () => {
+  const d = twoAapl(true);
+  const rows = portfolioRows(d);
+  // Sorted by value, so the EUR-cost holding (USD 1,000) comes before the file's first entry (USD 100).
+  assert.deepEqual(rows.map((r) => [r.key, r.value]), [[position("AAPL", "EUR"), "$1,000"], [position("AAPL"), "$100"]]);
+  const eur = assetHero("AAPL", d, rows[0].key);
+  assert.deepEqual([eur.value, eur.subLabel, eur.sub, eur.details[0]],
+    ["$1,000", "10 × $100.00", "+$600 · ▲ 150.0%", { label: "Avg cost", value: "€20.00" }]);
+  const usd = assetHero("AAPL", d, rows[1].key);
+  assert.deepEqual([usd.value, usd.subLabel, usd.sub, usd.details[0]],
+    ["$100", "1 × $100.00", "+$50 · ▲ 100.0%", { label: "Avg cost", value: "$50.00" }]);
+});
+
+test("a holding left out of the total stays out of the chart when another holding of its asset is valued", () => {
+  const d = twoAapl(false);
+  assert.equal(d.portfolio.total, 100);
+  const s = portfolioSeries(d, { AAPL: series("AAPL", [100, 100], "USD", 0, 86400000) }, "1M");
+  assert.deepEqual(s.points.map((p) => p[1]), [100, 100]);
+  // With the rate both are valued and both are charted.
+  const both = portfolioSeries(twoAapl(true), { AAPL: series("AAPL", [100, 100], "USD", 0, 86400000) }, "1M");
+  assert.deepEqual(both.points.map((p) => p[1]), [1100, 1100]);
+});
+
+test("a watched price converted at a stale rate warns on its row and hero; shown as quoted it does not", () => {
+  const states = Object.assign({}, closedStates, { NVDA: "live", "USDAUD=X": "stale" });
+  const off = make({ states, watch: ["NVDA"], nativePrices: false });
+  assert.equal(watchRows(off)[0].tooltip, "Includes 1 stale price: USDAUD=X as of Sat 07:00");
+  assert.equal(assetHero("NVDA", off, null).tooltip, "Includes 1 stale price: USDAUD=X as of Sat 07:00");
+  const on = make({ states, watch: ["NVDA"] });
+  assert.equal(watchRows(on)[0].tooltip, "");
+  assert.equal(assetHero("NVDA", on, null).tooltip, "");
+});
+
+test("a position valued with a stale cost-currency rate says so on its row and hero", () => {
+  const d = twoAapl(true);
+  const staleEur = make({ quotes: d.quotes, holdings: d.holdings, watch: [], baseCurrency: "USD", states: { AAPL: "live", "EURUSD=X": "stale" } });
+  const [eurRow, usdRow] = portfolioRows(staleEur);
+  assert.equal(eurRow.tooltip, "Includes 1 stale price: EURUSD=X as of Sat 07:00");
+  assert.equal(assetHero("AAPL", staleEur, eurRow.key).tooltip, "Includes 1 stale price: EURUSD=X as of Sat 07:00");
+  // The USD-cost holding does not use that rate.
+  assert.equal(usdRow.tooltip, "");
 });
