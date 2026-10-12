@@ -17,6 +17,7 @@ Adapted parts:
 - Fetcher.qml: the curl fetch discipline of MarketsFeed.qml (one request in
   flight, one queued request carrying the latest parameters, identical queued
   request dropped).
-- MarketService.qml: the atomic file write of Panel.qml (mktemp in the target
-  directory, then rename) and its watched FileView.
+- AtomicFile.qml: the atomic file write of Panel.qml (mktemp in the target
+  directory, then rename).
+- MarketService.qml: the watched FileView of Panel.qml.
 - ThemeColors.qml: reading the theme's green and red from colors.toml.

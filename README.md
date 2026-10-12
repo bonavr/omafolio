@@ -146,6 +146,10 @@ It holds symbols, prices and times, never quantities. It is safe to delete.
   currency, though not how much you hold. If that is more visibility than you
   accept, run your traffic through a VPN. Hiding the symbols themselves is not
   something this plugin does.
+- Nothing private goes on a command line. File contents (holdings and the
+  quote cache) reach the file writer, and request URLs (symbols and search
+  text) reach `curl`, on standard input, so other users on the machine cannot
+  read them from the process list.
 - `shell.json` holds the symbols in your bar and watchlist, never quantities.
   If you keep `~/.config` in a dotfiles repository, that file goes with it.
   The holdings file is under `~/.local/share` so it does not.
@@ -194,8 +198,10 @@ npm run check
 
 `npm run check` runs the tests (`node --test`), the type check
 (`tsc --checkJs` over `lib/`), a load check that imports every `lib/` module in
-Qt's real JavaScript engine (QJSEngine, which is stricter than Node), and
-`omarchy plugin validate .`. The load check and validate need Omarchy installed.
+Qt's real JavaScript engine (QJSEngine, which is stricter than Node), an I/O
+check that runs the file writer and the curl fetcher in a headless Quickshell,
+and `omarchy plugin validate .`. Everything after the type check needs Omarchy
+installed, and the I/O check also needs python3.
 
 The logic is in `lib/*.mjs`: plain modules with no network, file or Qt access,
 tested in Node against recorded responses in `tests/fixtures`. The QML files

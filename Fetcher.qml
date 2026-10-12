@@ -16,6 +16,9 @@ import Quickshell.Io
 // - Every request has a 15 s timeout and a 2 MiB body cap, and sends a generic
 //   user agent and no cookies. curl runs with -q, so ~/.curlrc cannot add
 //   cookies, headers or options that change what comes back.
+// - The URL reaches curl on stdin, as a config line, never as an argument: any
+//   local user can read a process's arguments from /proc/<pid>/cmdline, and
+//   URLs carry the symbols followed and the text typed into search.
 // - A curl that cannot be started counts as a failed request, so done() always
 //   follows.
 QtObject {
@@ -61,10 +64,21 @@ QtObject {
   function runCurrent() {
     exitSeen = false
     stdoutSeen = false
-    // -q must come first: it stops curl reading ~/.curlrc.
+    // -q must come first: it stops curl reading ~/.curlrc. -K - reads the URL
+    // from stdin (see configLine).
     proc.command = ["curl", "-q", "-sS", "--max-time", "15", "--max-filesize", "2097152",
-      "-A", "Mozilla/5.0", "-w", "\n%{http_code}", job[index].url]
+      "-A", "Mozilla/5.0", "-w", "\n%{http_code}", "-K", "-"]
+    proc.stdinEnabled = true
     proc.running = true
+  }
+
+  // A curl config line setting `url`. Inside double quotes curl unescapes \\
+  // and \". A line break would end the line and start another option, so CR
+  // and LF are percent-encoded; providers' URLs never hold one anyway.
+  function configLine(url) {
+    var quoted = String(url).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+      .replace(/\r/g, "%0D").replace(/\n/g, "%0A")
+    return 'url = "' + quoted + '"\n'
   }
 
   function answer() {
@@ -105,6 +119,11 @@ QtObject {
   }
 
   readonly property Process proc: Process {
+    // Turning stdin off closes it, so curl sees the end of its config.
+    onStarted: {
+      fetcher.proc.write(fetcher.configLine(fetcher.job[fetcher.index].url))
+      fetcher.proc.stdinEnabled = false
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
