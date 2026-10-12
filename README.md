@@ -9,11 +9,21 @@ day move and unrealised gain. No account and no API key.
 The bar rotates through the items you pick (Bitcoin by default), one at a time.
 Left click opens the panel, middle click refreshes, the scroll wheel steps
 through items. A shut market shows its last close dimmed, and a price that
-should be updating but is not is marked with a warning. The panel has Portfolio
-and Watchlist tabs, a chart for 1D, 1W, 1M or 1Y, and a row with a sparkline for
-every asset. Click a row to see that position on its own.
+should be updating but is not is marked with a warning.
 
-The screenshot uses made-up holdings.
+![The bar rotating through Bitcoin, the portfolio total, VOO and VTSAX](docs/media/ticker.gif)
+
+*Sped up: each item shows for 5 seconds by default.*
+
+The panel has Portfolio and Watchlist tabs, a chart for 1D, 1W, 1M or 1Y, and a
+row with a sparkline for every asset. Click a row, or step through rows with
+`j` and `k`, to see that position on its own.
+
+| Portfolio | One position | Watchlist |
+| --- | --- | --- |
+| ![The Portfolio tab: total value, day move, unrealised gain, a 1M chart and three holdings](screenshots/1-portfolio.png) | ![VOO on its own: value, gain, chart, average cost, weight and day range](screenshots/2-position.png) | ![The Watchlist tab with AAPL selected above five watched assets](screenshots/3-watchlist.png) |
+
+The screenshots use made-up holdings.
 
 ## Install
 
