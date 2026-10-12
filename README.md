@@ -43,6 +43,8 @@ Settings live in the widget's entry in `~/.config/omarchy/shell.json`. The
 settings page (the gear in the panel) edits them, and every change saves at
 once. You can also edit the file by hand.
 
+<img src="screenshots/4-settings.png" width="350" alt="The settings page: base currency, native prices, refresh, chart range, the bar rotation list, holdings with quantity and average cost, and the watchlist">
+
 | Key | Default | Meaning |
 |---|---|---|
 | `baseCurrency` | `USD` | Currency your totals, values and gains are shown in. One of USD, AUD, EUR, GBP, CAD, NZD, JPY, CHF, SGD, HKD, SEK, NOK, DKK, INR. |
