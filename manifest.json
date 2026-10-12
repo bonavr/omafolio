@@ -4,7 +4,7 @@
   "name": "Omafolio",
   "version": "0.1.0",
   "author": "bonavr",
-  "description": "Live prices for US stocks, ETFs, mutual funds and crypto in your bar, plus your portfolio's value, day move and total gain in your own currency. The bar rotates through the assets you pick; click it for a panel with sparklines, each position and a watchlist. Holdings and settings are edited right in the panel. No API key or account: prices come from Yahoo Finance and CoinGecko, and your quantities and costs never leave your machine. Screenshots and setup are in the README.",
+  "description": "Prices for US stocks, ETFs, mutual funds and crypto in your bar, plus your portfolio's value, day move and total gain in your own currency. The bar rotates through the assets you pick; click it for a panel with sparklines, each position and a watchlist. Holdings and settings are edited right in the panel. No API key or account: prices come from Yahoo Finance and CoinGecko, and your quantities and costs never leave your machine. Screenshots and setup are in the README.",
   "kinds": ["bar-widget", "service"],
   "entryPoints": { "barWidget": "BarWidget.qml", "service": "MarketService.qml" },
   "barWidget": {
