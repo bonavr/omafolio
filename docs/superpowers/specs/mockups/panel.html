@@ -1,0 +1,69 @@
+<style>
+  .wrap { display:flex; flex-wrap:wrap; gap:24px; justify-content:center; }
+  .col { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .col .cap { font-size:12px; opacity:.7; max-width:360px; text-align:center; }
+  .p { box-sizing:border-box; width:360px; max-width:100%; overflow:hidden;
+       background:#1e1e1e; color:#d4be98; font-family:"JetBrainsMono Nerd Font","JetBrains Mono",monospace; font-size:12px;
+       border-radius:10px; padding:16px 18px; border:1px solid #3c3836; }
+  .up { color:#a9b665; } .dn { color:#ea6962; } .mut { color:#7c6f64; } .acc { color:#7daea3; }
+  .row { display:flex; align-items:center; gap:10px; min-width:0; }
+  .between { justify-content:space-between; }
+  .tabs { gap:4px; } .tabs span { padding:3px 10px; border-radius:5px; } .tabs .on { background:#3c3836; }
+  .rng { gap:2px; } .rng span { padding:2px 7px; color:#7c6f64; } .rng .on { color:#7daea3; border-bottom:1px solid #7daea3; }
+  .label { color:#7c6f64; font-size:11px; margin-top:16px; }
+  .big { font-size:24px; line-height:1.2; }
+  .chg { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .sub { font-size:11px; margin-top:4px; }
+  .mstatus { font-size:11px; color:#7c6f64; margin-top:6px; }
+  .hr { border-top:1px solid #3c3836; margin:12px 0 6px; }
+  .li { display:grid; grid-template-columns:64px 50px minmax(0,1fr) 64px; align-items:center; column-gap:10px;
+        padding:7px 6px; margin:0 -6px; border-radius:5px; }
+  .li .r { text-align:right; white-space:nowrap; }
+  .li.sel { background:#282828; box-shadow:inset 2px 0 0 #7daea3; }
+  .detail { font-size:11px; color:#7c6f64; display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:10px; }
+  .detail b { display:block; color:#d4be98; font-weight:normal; font-size:12px; margin-top:2px; }
+  .back { color:#7c6f64; font-size:11px; }
+</style>
+
+<h2>Layout A, second version</h2>
+<p class="subtitle">Changes: more padding inside the panel and between rows; space between each arrow and its number; nothing can overflow the panel now (long values get truncated instead); the market status has its own line instead of sharing one with the range picker. On the right, the same panel after clicking VOO: the chart switches to that position. Esc or "← Portfolio" goes back.</p>
+
+<div class="wrap">
+
+  <div class="col">
+    <div class="p">
+      <div class="row between"><div class="row tabs"><span class="on">Portfolio</span><span class="mut">Watchlist</span></div><span class="mut">󰒓</span></div>
+      <div class="label">Total value · AUD</div>
+      <div class="row" style="gap:14px;align-items:baseline"><span class="big">$35,944</span><span class="chg up">▲ 0.4% <span class="mut">today</span></span></div>
+      <div class="row sub" style="gap:8px"><span class="mut">Unrealised</span><span class="chg up">+$16,630 · ▲ 86.1%</span></div>
+      <svg viewBox="0 0 324 76" style="display:block;width:100%;height:76px;margin-top:12px"><polyline fill="#a9b66522" stroke="none" points="0,60 20,57 40,62 60,52 80,54 100,46 120,49 140,41 160,43 180,36 200,39 220,30 240,32 260,26 280,28 300,19 324,21 324,76 0,76"/><polyline fill="none" stroke="#a9b665" stroke-width="1.6" points="0,60 20,57 40,62 60,52 80,54 100,46 120,49 140,41 160,43 180,36 200,39 220,30 240,32 260,26 280,28 300,19 324,21"/></svg>
+      <div class="row between" style="margin-top:8px"><div class="row rng"><span>1D</span><span>1W</span><span class="on">1M</span><span>1Y</span></div><span class="chg up" style="font-size:11px">▲ 7.9% over 1M</span></div>
+      <div class="mstatus">󰒲 US market closed · opens Tue 00:30 AEDT</div>
+      <div class="hr"></div>
+      <div class="li"><span>VOO</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,11 8,10 16,12 25,7 33,8 41,5 50,4"/></svg><span class="r">$12,288</span><span class="r chg up" style="justify-content:flex-end">▲ 0.6%</span></div>
+      <div class="li"><span>AAPL</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#ea6962" stroke-width="1.3" points="0,4 8,6 16,5 25,8 33,7 41,10 50,11"/></svg><span class="r">$9,635</span><span class="r chg dn" style="justify-content:flex-end">▼ 1.1%</span></div>
+      <div class="li"><span>VTSAX</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,10 8,10 16,9 25,8 33,8 41,6 50,5"/></svg><span class="r">$8,118</span><span class="r chg up" style="justify-content:flex-end">▲ 0.6%</span></div>
+      <div class="li"><span class="acc">₿ BTC</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,12 8,9 16,11 25,6 33,8 41,4 50,3"/></svg><span class="r">$5,903</span><span class="r chg up" style="justify-content:flex-end">▲ 1.4%</span></div>
+    </div>
+    <div class="cap">Default: portfolio overview</div>
+  </div>
+
+  <div class="col">
+    <div class="p">
+      <div class="row between"><div class="row tabs"><span class="on">Portfolio</span><span class="mut">Watchlist</span></div><span class="mut">󰒓</span></div>
+      <div class="label"><span class="back">← Portfolio</span> · VOO · Vanguard S&amp;P 500 ETF</div>
+      <div class="row" style="gap:14px;align-items:baseline"><span class="big">$12,288</span><span class="chg up">▲ 0.6% <span class="mut">today</span></span></div>
+      <div class="row sub" style="gap:8px"><span class="mut">12 × US$715.59</span><span class="chg up">+$5,243 · ▲ 74.4%</span></div>
+      <svg viewBox="0 0 324 76" style="display:block;width:100%;height:76px;margin-top:12px"><polyline fill="#a9b66522" stroke="none" points="0,58 20,60 40,55 60,56 80,49 100,51 120,44 140,47 160,40 180,42 200,35 220,37 240,30 260,31 280,25 300,23 324,22 324,76 0,76"/><polyline fill="none" stroke="#a9b665" stroke-width="1.6" points="0,58 20,60 40,55 60,56 80,49 100,51 120,44 140,47 160,40 180,42 200,35 220,37 240,30 260,31 280,25 300,23 324,22"/></svg>
+      <div class="row between" style="margin-top:8px"><div class="row rng"><span>1D</span><span>1W</span><span class="on">1M</span><span>1Y</span></div><span class="chg up" style="font-size:11px">▲ 5.2% over 1M</span></div>
+      <div class="detail"><div>Avg cost<b>US$410.25</b></div><div>Weight<b>34%</b></div><div>Day range<b>711–717</b></div></div>
+      <div class="hr"></div>
+      <div class="li sel"><span>VOO</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,11 8,10 16,12 25,7 33,8 41,5 50,4"/></svg><span class="r">$12,288</span><span class="r chg up" style="justify-content:flex-end">▲ 0.6%</span></div>
+      <div class="li"><span>AAPL</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#ea6962" stroke-width="1.3" points="0,4 8,6 16,5 25,8 33,7 41,10 50,11"/></svg><span class="r">$9,635</span><span class="r chg dn" style="justify-content:flex-end">▼ 1.1%</span></div>
+      <div class="li"><span>VTSAX</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,10 8,10 16,9 25,8 33,8 41,6 50,5"/></svg><span class="r">$8,118</span><span class="r chg up" style="justify-content:flex-end">▲ 0.6%</span></div>
+      <div class="li"><span class="acc">₿ BTC</span><svg viewBox="0 0 50 14"><polyline fill="none" stroke="#a9b665" stroke-width="1.3" points="0,12 8,9 16,11 25,6 33,8 41,4 50,3"/></svg><span class="r">$5,903</span><span class="r chg up" style="justify-content:flex-end">▲ 1.4%</span></div>
+    </div>
+    <div class="cap">After clicking VOO: the chart and stats switch to that position</div>
+  </div>
+
+</div>

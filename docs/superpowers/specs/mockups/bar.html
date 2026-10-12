@@ -1,0 +1,57 @@
+<style>
+  .bar { background:#1e1e1e; color:#d4be98; font-family:"JetBrainsMono Nerd Font","JetBrains Mono",monospace; font-size:13px;
+         height:30px; display:flex; align-items:center; justify-content:center; gap:16px; padding:0 10px; border-radius:6px; margin:6px 0; }
+  .w { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:4px; background:#282828; min-width:190px; }
+  .up { color:#a9b665; } .dn { color:#ea6962; } .mut { color:#7c6f64; } .acc { color:#7daea3; }
+  .closed .val, .closed .chg { color:#7c6f64; }
+  .n1 { font-size:10px; color:#7c6f64; margin-left:auto; }
+  .n2 { font-size:9px; color:#7c6f64; vertical-align:super; margin-right:-3px; }
+  .n3 { font-size:10px; color:#1e1e1e; background:#665c54; border-radius:3px; padding:0 4px; margin-left:auto; }
+  .frame { display:grid; grid-template-columns:110px 1fr; align-items:center; gap:10px; }
+  .frame .lbl { font-size:12px; opacity:.65; }
+  .note { font-size:13px; opacity:.8; margin:6px 0 0; }
+</style>
+
+<h2>Rotating ticker: position counter style</h2>
+<p class="subtitle">Each style shows four frames of one rotation through <code>"bar": ["crypto:bitcoin", "portfolio", "VOO", "VTSAX"]</code>. On equity frames the market is closed (Saturday), so they get option D's treatment: dimmed, with a sleep icon. The counter is a number, so it works with 3 items or 30. Pick a counter style.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="n1-trailing" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Trailing "2/4", dim and small</h3>
+      <div class="frame"><span class="lbl">bitcoin (live)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w"><span class="acc">₿</span> 118,066 <span class="up">▲1.4%</span><span class="n1">1/4</span></span></div></div>
+      <div class="frame"><span class="lbl">portfolio (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">󰄨</span> <span class="val">412.3k</span> <span class="chg">▲0.8%</span> <span class="mut">󰒲</span><span class="n1">2/4</span></span></div></div>
+      <div class="frame"><span class="lbl">VOO (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">VOO</span> <span class="val">715.59</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span><span class="n1">3/4</span></span></div></div>
+      <div class="frame"><span class="lbl">VTSAX (fund NAV)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">VTSAX</span> <span class="val">185.93</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span><span class="n1">4/4</span></span></div></div>
+      <p class="note">Reads like a page count, stays out of the way at the right edge, and gets no wider until you have 10+ items.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="n2-super" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Leading superscript index</h3>
+      <div class="frame"><span class="lbl">bitcoin (live)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w"><span class="n2">1</span><span class="acc">₿</span> 118,066 <span class="up">▲1.4%</span></span></div></div>
+      <div class="frame"><span class="lbl">portfolio (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="n2">2</span><span class="mut">󰄨</span> <span class="val">412.3k</span> <span class="chg">▲0.8%</span> <span class="mut">󰒲</span></span></div></div>
+      <div class="frame"><span class="lbl">VOO (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="n2">3</span><span class="mut">VOO</span> <span class="val">715.59</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span></span></div></div>
+      <div class="frame"><span class="lbl">VTSAX (fund NAV)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="n2">4</span><span class="mut">VTSAX</span> <span class="val">185.93</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span></span></div></div>
+      <p class="note">Most compact, but it doesn't show the total, so you can't tell how far through the cycle you are.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="n3-badge" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Trailing badge</h3>
+      <div class="frame"><span class="lbl">bitcoin (live)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w"><span class="acc">₿</span> 118,066 <span class="up">▲1.4%</span><span class="n3">1/4</span></span></div></div>
+      <div class="frame"><span class="lbl">portfolio (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">󰄨</span> <span class="val">412.3k</span> <span class="chg">▲0.8%</span> <span class="mut">󰒲</span><span class="n3">2/4</span></span></div></div>
+      <div class="frame"><span class="lbl">VOO (closed)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">VOO</span> <span class="val">715.59</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span><span class="n3">3/4</span></span></div></div>
+      <div class="frame"><span class="lbl">VTSAX (fund NAV)</span><div class="bar"><span>Sat 10 Oct 14:20</span><span class="w closed"><span class="mut">VTSAX</span> <span class="val">185.93</span> <span class="chg">▲0.6%</span> <span class="mut">󰒲</span><span class="n3">4/4</span></span></div></div>
+      <p class="note">Easiest to spot, but it's another filled shape in a bar that's otherwise plain text.</p>
+    </div>
+  </div>
+
+</div>
+<p class="note">VOO and VTSAX show their real Friday closes from the earlier probe. The portfolio figure is made up.</p>

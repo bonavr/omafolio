@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "bonavr.omafolio",
+  "name": "Omafolio",
+  "version": "0.1.0",
+  "author": "bonavr",
+  "description": "Stocks, funds and crypto in the bar: live prices and your portfolio's value, day move and gain",
+  "kinds": ["bar-widget", "service"],
+  "entryPoints": { "barWidget": "BarWidget.qml", "service": "MarketService.qml" },
+  "barWidget": {
+    "displayName": "Omafolio",
+    "description": "Rotating prices and your portfolio",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
