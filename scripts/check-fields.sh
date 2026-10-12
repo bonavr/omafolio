@@ -148,6 +148,16 @@ ShellRoot {
       tc.mouseClick(refresh, refresh.width / 2, refresh.height / 2)
       tc.keyClick(Qt.Key_Down)
       root.report("steps stop at the ends", root.settings() === before, root.settings())
+      // A step down that has room saves too; so does a click on ▴.
+      stubMarket.config = Object.assign({}, stubMarket.config, { refreshSeconds: 90 })
+      tc.keyClick(Qt.Key_Down)
+      var down = stubPanel.settings.refreshSeconds
+      var up = everything(refresh, []).filter(function(o) { return o.text === "▴" })[0]
+      tc.mouseClick(up, up.width / 2, up.height / 2)
+      root.report("Down and a click on the up arrow step and save", down === 89 && stubPanel.settings.refreshSeconds === 91,
+        down + " then " + stubPanel.settings.refreshSeconds)
+      stubMarket.config = Object.assign({}, stubMarket.config, { refreshSeconds: 60 })
+      tc.mouseClick(refresh, refresh.width / 2, refresh.height / 2)
       tc.keyClick(Qt.Key_End)
       tc.keyClick("9")
       stubMarket.config = Object.assign({}, stubMarket.config, { refreshSeconds: 120 })
@@ -229,5 +239,5 @@ fi
 printf '%s\n' "$results"
 status=0
 printf '%s\n' "$results" | grep -q '^FAIL' && status=1
-[ "$(printf '%s\n' "$results" | grep -c '^PASS')" -eq 23 ] || { echo "expected 23 passes"; status=1; }
+[ "$(printf '%s\n' "$results" | grep -c '^PASS')" -eq 24 ] || { echo "expected 24 passes"; status=1; }
 exit "$status"

@@ -7,7 +7,8 @@ import "lib/keyfield.mjs" as Line
 // TextField. Qt's editable TextInput (inside TextField, SpinBox and the shell's
 // NumberField) reads the whole clipboard every time it changes, with no size
 // limit or deadline, so another program could stall the shell through any
-// such field that exists, shown or not. This one never touches the clipboard and offers no paste.
+// such field that exists, shown or not. This one never touches the clipboard
+// and offers no paste.
 //
 // lib/keyfield.mjs decides what each key does. Keys it leaves alone (Enter,
 // Esc, Tab, Up, Down) reach this item's own Keys handlers, then its parents.
@@ -158,7 +159,7 @@ FocusScope {
 
     Rectangle {
       visible: field.activeFocus && !field.all && blink.on
-      x: Math.round(viewport.textX + viewport.cursorX)
+      x: Math.min(Math.round(viewport.textX + viewport.cursorX), Math.floor(viewport.width) - 1)
       anchors.verticalCenter: parent.verticalCenter
       width: 1
       height: metrics.height

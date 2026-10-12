@@ -217,8 +217,8 @@ Qt's real JavaScript engine (QJSEngine, which is stricter than Node), an I/O
 check that runs the file writer and the curl fetcher in a headless Quickshell,
 a field check that loads the settings page the same way, confirms nothing under
 it is a Qt text input and drives its fields with real key presses, and
-`omarchy plugin validate .`. Everything after the type
-check needs Omarchy installed, and the I/O check also needs python3.
+`omarchy plugin validate .`. Everything after the type check needs Omarchy
+installed, and the I/O check also needs python3.
 
 The logic is in `lib/*.mjs`: plain modules with no network, file or Qt access,
 tested in Node against recorded responses in `tests/fixtures`. The QML files

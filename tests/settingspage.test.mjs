@@ -145,6 +145,7 @@ test("snapSeconds lowers a value above max to max without flagging it", () => {
   assert.deepEqual(snapSeconds("3600", 2, 3600), { seconds: 3600, snapped: false });
   assert.deepEqual(snapSeconds("3601", 2, 3600), { seconds: 3600, snapped: false });
   assert.deepEqual(snapSeconds("99999999999", 60, 86400), { seconds: 86400, snapped: false });
+  assert.deepEqual(snapSeconds("100000", 2), { seconds: 100000, snapped: false });
 });
 
 test("snapSeconds refuses misplaced separators", () => {
