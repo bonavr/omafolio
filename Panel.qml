@@ -167,7 +167,17 @@ Panel {
   readonly property string shownAsset: shownRow ? shownRow.asset : ""
 
   // Cached history for everything on either tab; asking is what fetches it.
-  readonly property var seriesByAsset: market && opened ? market.history(PanelLib.historyAssets(panelData, market.fx), range) : ({})
+  //
+  // The range and the series that answer it are produced together, because a range
+  // change can re-evaluate chartSeries with the new range still holding the previous
+  // range's series. combinedSeries would then walk the new range's grid (15 min for
+  // 1D) across the old range's span (a year for 1Y) - ~35k buckets - and hang the
+  // shell for ~25 s. Both branches read `range`, so this is also the first binding
+  // registered on it.
+  readonly property var historyData: market && opened
+    ? { range: range, series: market.history(PanelLib.historyAssets(panelData, market.fx), range) }
+    : { range: range, series: ({}) }
+  readonly property var seriesByAsset: historyData.series
 
   readonly property var hero: {
     if (!panelData) return null
@@ -177,9 +187,9 @@ Panel {
   readonly property var chartSeries: {
     if (!panelData) return null
     if (shownAsset !== "") return seriesByAsset[shownAsset] || null
-    return portfolioTab ? PanelLib.portfolioSeries(panelData, seriesByAsset, range) : null
+    return portfolioTab ? PanelLib.portfolioSeries(panelData, seriesByAsset, historyData.range) : null
   }
-  readonly property var rangeInfo: PanelLib.rangeLine(chartSeries, range)
+  readonly property var rangeInfo: PanelLib.rangeLine(chartSeries, historyData.range)
   readonly property var statusLines: panelData && shownAsset === "" ? PanelLib.statusLines(rows.map(function(r) { return r.asset }), panelData) : []
 
   // A sentence in place of (or above) the rows: unreadable holdings file, or an
